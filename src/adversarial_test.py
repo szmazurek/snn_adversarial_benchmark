@@ -14,7 +14,9 @@ from torch.nn.functional import softmax
 
 from typing import List, Dict
 
+
 REPEATS = 10
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def get_lif_nodes(model: nn.Module) -> List[nn.Module]:
@@ -94,13 +96,13 @@ def process_data_recorded_by_hooks(
 
 
 def is_pred_correct(logit, target):
-    pred = logit.argmax(dim=1).item()
+    pred = logit.argmax(dim=1).cpu().item()
     return pred == target
 
 
 def generate_random_frame(img):
 
-    random_img = torch.randn_like(img[0], dtype=torch.float32)
+    random_img = torch.randn_like(img[0], dtype=torch.float32, device=DEVICE)
     # CAUTION: what happens if we go out of the range of 0-1?
     # Will it crash earlier?
     random_img = (random_img - random_img.min()) / (
@@ -129,9 +131,10 @@ def adversarial_attack_test(
         results_path, "adversarial_test_results.json"
     )
     for n, (img, target) in enumerate(progbar):
-        img = img.unsqueeze(1)
-        pred = model(img).mean(dim=0)
-        pred_correct = is_pred_correct(pred, target)
+        img = img.unsqueeze(1).to(DEVICE)
+        target = target.to(DEVICE)
+        pred_original = model(img).mean(dim=0)
+        pred_correct = is_pred_correct(pred_original, target)
 
         if not pred_correct:
             continue
@@ -146,18 +149,19 @@ def adversarial_attack_test(
         # save metadata of original sample and pred logits (distirbution)
         # estimate time to achieve correct prediction
         functional.reset_net(model)
-        pred_total = torch.zeros_like(pred)
+        pred_total = torch.zeros_like(pred_original, device=DEVICE)
         for f, frame in enumerate(img):
             frame = frame.unsqueeze(0)
             pred = model(frame).mean(dim=0)
             pred_total += pred
-            if is_pred_correct(pred, target):
+            if is_pred_correct(pred_total, target):
 
                 num_frames_to_solution: int = f + 1
                 break
         sample_data_store[n] = {
             "target": target,
-            "clean_sample_pred_distribution": softmax(pred, dim=1)
+            "clean_sample_pred_distribution": softmax(pred_original, dim=1)
+            .cpu()
             .squeeze()
             .tolist(),
             "num_frames_to_solve": num_frames_to_solution,
@@ -191,6 +195,7 @@ def adversarial_attack_test(
             sample_data_store[n]["adversarial_samples_results"].append(
                 {
                     "pred_distribution": softmax(pred, dim=1)
+                    .cpu()
                     .squeeze()
                     .tolist(),
                     "pred_correct": pred_correct,
