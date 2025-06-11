@@ -13,7 +13,8 @@ from datasets import MNISTRepeated
 from models import SewResnet18
 
 MODEL_MAP: Dict[str, Callable[[Any], nn.Module]] = {"sew_resnet": SewResnet18}
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")s
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 def train_epoch(
     model, dataloader, criterion, optimizer, accuracy_metric, epoch
