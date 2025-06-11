@@ -25,21 +25,21 @@ def train_epoch(
     dataloader_progbar = tqdm(dataloader, desc=f"Train Epoch {epoch+1}")
     for n, (img, target) in enumerate(dataloader_progbar):
         optimizer.zero_grad()
-        out = model(img.transpose(0, 1)).mean(0)
-        loss = criterion(out, target)
+        out = model(img.transpose(0, 1).to(DEVICE)).mean(0)
+        loss = criterion(out, target.to(DEVICE))
         loss.backward()
         optimizer.step()
-        epoch_loss += loss.item()
+        epoch_loss += loss.cpu().item()
         epoch_preds.append(out)
         epoch_targets.append(target)
         functional.reset_net(model)
-        dataloader_progbar.set_postfix(loss=loss.item())
+        dataloader_progbar.set_postfix(loss=loss.cpu().item())
         if (n + 1) % 200 == 0:
             break
-    epoch_preds = torch.cat(epoch_preds)
-    epoch_targets = torch.cat(epoch_targets)
+    epoch_preds = torch.cat(epoch_preds).to(DEVICE)
+    epoch_targets = torch.cat(epoch_targets).to(DEVICE)
     epoch_loss /= len(dataloader)
-    epoch_acc = accuracy_metric(epoch_preds, epoch_targets)
+    epoch_acc = accuracy_metric(epoch_preds, epoch_targets).cpu().item()
     print(
         f"Train Epoch {epoch+1}: Loss: {epoch_loss:.4f}",
         f"Accuracy: {epoch_acc:.4f}",
@@ -58,12 +58,12 @@ def validate_epoch(model, dataloader, criterion, accuracy_metric, epoch):
         )
         for img, target in dataloader_progbar:
             out = model(img.transpose(0, 1).to(DEVICE)).mean(0)
-            loss = criterion(out, target)
+            loss = criterion(out, target.to(DEVICE))
             epoch_loss += loss.cpu().item()
             epoch_preds.append(out)
             epoch_targets.append(target)
             functional.reset_net(model)
-            dataloader_progbar.set_postfix(loss=loss.item())
+            dataloader_progbar.set_postfix(loss=loss.cpu().item())
 
     epoch_preds = torch.cat(epoch_preds).to(DEVICE)
     epoch_targets = torch.cat(epoch_targets).to(DEVICE)
