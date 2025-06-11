@@ -1,5 +1,6 @@
 torch
 torchvision
+torchmetrics
 spikingjelly
 pandas
 matplotlib
