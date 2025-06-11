@@ -4,6 +4,8 @@ import torch
 import torch.nn as nn
 import numpy as np
 from os.path import join as path_join
+
+import tqdm
 from models import SewResnet18
 from datasets import MNISTRepeated
 from random import sample as random_sample
@@ -117,7 +119,16 @@ def adversarial_attack_test(
         apply_forward_hooks(lif_nodes)
     )
     sample_data_store = {}
-    for n, (img, target) in enumerate(dataset):
+    progbar = tqdm.tqdm(
+        dataset,
+        total=len(dataset),
+        desc="Adversarial attack test",
+        unit="sample",
+    )
+    json_results_path = path_join(
+        results_path, "adversarial_test_results.json"
+    )
+    for n, (img, target) in enumerate(progbar):
         img = img.unsqueeze(1)
         pred = model(img).mean(dim=0)
         pred_correct = is_pred_correct(pred, target)
@@ -141,10 +152,7 @@ def adversarial_attack_test(
             pred = model(frame).mean(dim=0)
             pred_total += pred
             if is_pred_correct(pred, target):
-                print(
-                    f"Correct prediction achieved at frame {f+1} "
-                    f"out of {REPEATS} for sample {n}"
-                )
+
                 num_frames_to_solution: int = f + 1
                 break
         sample_data_store[n] = {
@@ -202,18 +210,15 @@ def adversarial_attack_test(
             clear_hook_container(hooked_layers)
             if not pred_correct:
                 attack_end = True
-        break
-    json_results_path = path_join(
-        results_path, "adversarial_test_results.json"
-    )
-    with open(json_results_path, "w") as f:
-        json.dump(sample_data_store, f, indent=4)
+
+        with open(json_results_path, "w") as f:
+            json.dump(sample_data_store, f, indent=4)
 
 
 if __name__ == "__main__":
     model: nn.Module = SewResnet18(n_channels=1)
     functional.set_step_mode(model, step_mode="m")
-    model.load_state_dict(torch.load("checkpoints/best_model.pth"))
+    model.load_state_dict(torch.load("./checkpoints/best_model.pth"))
     mnist_test_set = MNISTRepeated(
         root="./data", train=False, repeat=REPEATS, download=True
     )
