@@ -13,7 +13,7 @@ from datasets import MNISTRepeated
 from models import SewResnet18
 
 MODEL_MAP: Dict[str, Callable[[Any], nn.Module]] = {"sew_resnet": SewResnet18}
-
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")s
 
 def train_epoch(
     model, dataloader, criterion, optimizer, accuracy_metric, epoch
@@ -57,18 +57,18 @@ def validate_epoch(model, dataloader, criterion, accuracy_metric, epoch):
             dataloader, desc=f"Validation Epoch {epoch+1}"
         )
         for img, target in dataloader_progbar:
-            out = model(img.transpose(0, 1)).mean(0)
+            out = model(img.transpose(0, 1).to(DEVICE)).mean(0)
             loss = criterion(out, target)
-            epoch_loss += loss.item()
+            epoch_loss += loss.cpu().item()
             epoch_preds.append(out)
             epoch_targets.append(target)
             functional.reset_net(model)
             dataloader_progbar.set_postfix(loss=loss.item())
 
-    epoch_preds = torch.cat(epoch_preds)
-    epoch_targets = torch.cat(epoch_targets)
+    epoch_preds = torch.cat(epoch_preds).to(DEVICE)
+    epoch_targets = torch.cat(epoch_targets).to(DEVICE)
     epoch_loss /= len(dataloader)
-    epoch_acc = accuracy_metric(epoch_preds, epoch_targets)
+    epoch_acc = accuracy_metric(epoch_preds, epoch_targets).cpu().item()
     print(
         f"Validation Epoch {epoch+1}: Loss: {epoch_loss:.4f}, Accuracy: {epoch_acc:.4f}"
     )
@@ -81,14 +81,14 @@ def test_model(model, dataloader, accuracy_metric):
     epoch_targets = []
     with torch.no_grad():
         for img, target in dataloader:
-            out = model(img.transpose(0, 1)).mean(0)
+            out = model(img.transpose(0, 1).to(DEVICE)).mean(0)
             epoch_preds.append(out)
             epoch_targets.append(target)
             functional.reset_net(model)
 
-    epoch_preds: torch.Tensor = torch.cat(epoch_preds)
-    epoch_targets = torch.cat(epoch_targets)
-    epoch_acc = accuracy_metric(epoch_preds, epoch_targets)
+    epoch_preds: torch.Tensor = torch.cat(epoch_preds).to(DEVICE)
+    epoch_targets = torch.cat(epoch_targets).to(DEVICE)
+    epoch_acc = accuracy_metric(epoch_preds, epoch_targets).cpu().item()
     print(f"Test Accuracy: {epoch_acc:.4f}")
 
 
@@ -96,7 +96,7 @@ def main(args):
     checkpoint_path = os.path.join(
         args.checkpoint_dir, f"{args.experiment_name}_best_{args.model}.pth"
     )
-    model = MODEL_MAP[args.model](n_channels=1)
+    model = MODEL_MAP[args.model](n_channels=1).to(DEVICE)
     functional.set_step_mode(model, step_mode="m")
 
     mnist_dataset_repeat_train_full = MNISTRepeated(
@@ -133,8 +133,8 @@ def main(args):
         num_workers=args.num_workers,
     )
 
-    criterion = nn.CrossEntropyLoss()
-    accuracy_metric = Accuracy(task="multiclass", num_classes=10)
+    criterion = nn.CrossEntropyLoss().to(DEVICE)
+    accuracy_metric = Accuracy(task="multiclass", num_classes=10).to(DEVICE)
 
     optimizer = torch.optim.AdamW(
         model.parameters(),
