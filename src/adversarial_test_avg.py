@@ -184,9 +184,7 @@ def adversarial_attack_test(
         desc="Adversarial attack test",
         unit="sample",
     )
-    json_results_path = path_join(
-        results_path, "adversarial_test_results.json"
-    )
+
     for n, (img, target) in enumerate(progbar):
         img = img.unsqueeze(1).to(DEVICE)
         pred_original = model(img).mean(dim=0)
@@ -223,69 +221,54 @@ def adversarial_attack_test(
             "num_frames_to_solve": num_frames_to_solution,
             "adversarial_samples_results": [],
         }
-        attack_end = False
         adversarial_img = img.clone()
         clear_hook_container(hooked_layers)
 
-        while not attack_end:
+        for evaluated_noise_level in range(1, REPEATS):
+            attack_stop = False
             functional.reset_net(model)
             summed_results_hooked_layers = {}
-            evaluated_noise_level = 1
-            if evaluated_noise_level == REPEATS:
-                attack_end = True
-                break
 
             idx_to_replace_combinations = list(
                 combinations(range(REPEATS), evaluated_noise_level)
             )
-            max_combinations_to_evaluate = max(
-                1, N_ITERS_NOISE_INJECTION + 1 - evaluated_noise_level
+            idx_to_replace_combinations = random_sample(
+                idx_to_replace_combinations, N_ITERS_NOISE_INJECTION
             )
-            idx_to_replace_combinations = idx_to_replace_combinations[
-                :max_combinations_to_evaluate
-            ]
-
+            preds_correctness = []
             for replace_idxes in idx_to_replace_combinations:
+
                 for replace_idx in replace_idxes:
                     adversarial_img[replace_idx] = generate_random_frame(img)
-                # predict
 
                 pred = model(adversarial_img).mean(dim=0)
-                pred_correct = is_pred_correct(pred, target)
-                # save metadata of adversarial sample and pred
-                # logits (distirbution)
+                preds_correctness.append(is_pred_correct(pred, target))
                 process_data_recorded_by_hooks_for_avg(
                     hooked_layers=hooked_layers,
                     summed_results_hooked_layers=summed_results_hooked_layers,
                 )
                 clear_hook_container(hooked_layers)
                 functional.reset_net(model)
-                # aggresive stop condition - if a single prediction among evaluated ones for averaging is incorrect
-                if not pred_correct:
-                    attack_end = True
-                    break
-
                 adversarial_img = img.clone()
-
-        process_data_recorded_by_hooks_avg(
-            summed_results_hooked_layers=summed_results_hooked_layers,
-            n_sample_repeats=N_ITERS_NOISE_INJECTION,
-            save_path=results_path,
-            sample_idx=n,
-            label=target,
-            is_correct=pred_correct,
-            noise_level=evaluated_noise_level / REPEATS,
-        )
-        evaluated_noise_level += 1
-
-        with open(json_results_path, "w") as f:
-            json.dump(sample_data_store, f, indent=4)
+            if any(not correctness for correctness in preds_correctness):
+                attack_stop = True
+            process_data_recorded_by_hooks_avg(
+                summed_results_hooked_layers=summed_results_hooked_layers,
+                n_sample_repeats=N_ITERS_NOISE_INJECTION,
+                save_path=results_path,
+                sample_idx=n,
+                label=target,
+                is_correct=True if not attack_stop else False,
+                noise_level=evaluated_noise_level / REPEATS,
+            )
+            if attack_stop:
+                break
 
 
 if __name__ == "__main__":
     model: nn.Module = SewResnet18(n_channels=1)
     functional.set_step_mode(model, step_mode="m")
-    model.load_state_dict(torch.load("./checkpoints/best_model.pth"))
+    model.load_state_dict(torch.load("../checkpoints/best_model.pth"))
     model.to(DEVICE)
     mnist_test_set = MNISTRepeated(
         root="./data", train=False, repeat=REPEATS, download=True
