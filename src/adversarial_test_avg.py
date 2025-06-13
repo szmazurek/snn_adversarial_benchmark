@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 from os.path import join as path_join
-
+from itertools import combinations
 import tqdm
 from models import SewResnet18
 from datasets import MNISTRepeated
@@ -16,7 +16,7 @@ from typing import List, Dict
 
 
 REPEATS = 10
-N_SAMPLES_TO_ASSES = 2000
+N_ITERS_NOISE_INJECTION = 10
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -96,6 +96,62 @@ def process_data_recorded_by_hooks(
         np.save(spike_path, s_seq)
 
 
+def process_data_recorded_by_hooks_for_avg(
+    hooked_layers: Dict[str, Dict[str, List[torch.Tensor]]],
+    summed_results_hooked_layers: Dict[str, Dict[str, List[torch.Tensor]]],
+):
+    for name, data in hooked_layers.items():
+        concatenated_v_seq = torch.cat(data["v_seq"])
+        concatenated_s_seq = torch.cat(data["s_seq"])
+        if name not in summed_results_hooked_layers:
+            summed_results_hooked_layers[name] = {
+                "v_seq": concatenated_v_seq,
+                "s_seq": concatenated_s_seq,
+            }
+        else:
+
+            summed_results_hooked_layers[name]["v_seq"] += concatenated_v_seq
+            summed_results_hooked_layers[name]["s_seq"] += concatenated_s_seq
+
+
+def process_data_recorded_by_hooks_avg(
+    summed_results_hooked_layers: Dict[str, torch.Tensor],
+    n_sample_repeats: int,
+    save_path: str,
+    sample_idx: int,
+    label: int,
+    is_correct: bool,
+    noise_level: float | None = None,
+):
+    sample_save_path: str = path_join(
+        save_path, f"label_{label}", f"sample_{sample_idx}"
+    )
+    last_dir_name: str = "correct" if is_correct else "incorrect"
+    last_dir_name += (
+        "_original"
+        if noise_level is None
+        else f"_noise_{round(100*noise_level)}"
+    )
+    sample_save_path = path_join(sample_save_path, last_dir_name)
+    if not os.path.exists(sample_save_path):
+        os.makedirs(sample_save_path)
+    for name, data in summed_results_hooked_layers.items():
+        v_seq = (data["v_seq"] / n_sample_repeats).cpu().numpy().squeeze()
+        s_seq = (data["s_seq"] / n_sample_repeats).cpu().numpy().squeeze()
+        voltage_path = path_join(
+            sample_save_path,
+            f"test_{sample_idx}_label_{label}_voltage"
+            f"_{name.replace('-', 'm')}.npy",
+        )
+        spike_path = path_join(
+            sample_save_path,
+            f"test_{sample_idx}_label_{label}_spike_"
+            f"{name.replace('-', 'm')}.npy",
+        )
+        np.save(voltage_path, v_seq)
+        np.save(spike_path, s_seq)
+
+
 def is_pred_correct(logit, target):
     pred = logit.argmax(dim=1).cpu().item()
     return pred == target
@@ -132,8 +188,6 @@ def adversarial_attack_test(
         results_path, "adversarial_test_results.json"
     )
     for n, (img, target) in enumerate(progbar):
-        if n >= N_SAMPLES_TO_ASSES:
-            break
         img = img.unsqueeze(1).to(DEVICE)
         pred_original = model(img).mean(dim=0)
         pred_correct = is_pred_correct(pred_original, target)
@@ -170,53 +224,59 @@ def adversarial_attack_test(
             "adversarial_samples_results": [],
         }
         attack_end = False
-        replaced_frames_idxes = []
-        replaced_frames_count = 0
         adversarial_img = img.clone()
         clear_hook_container(hooked_layers)
 
         while not attack_end:
             functional.reset_net(model)
-            # randomly select a frame to replace
-            # (but not the ones already replaced)
-            idxs_to_choose = [
-                i for i in range(REPEATS) if i not in replaced_frames_idxes
-            ]
-            if not idxs_to_choose:
+            summed_results_hooked_layers = {}
+            evaluated_noise_level = 1
+            if evaluated_noise_level == REPEATS:
                 attack_end = True
                 break
-            replace_idx = random_sample(idxs_to_choose, 1)[0]
-            adversarial_img[replace_idx] = generate_random_frame(img)
-            replaced_frames_idxes.append(replace_idx)
-            replaced_frames_count += 1
-            # predict
-            pred = model(adversarial_img).mean(dim=0)
-            pred_correct = is_pred_correct(pred, target)
-            # save metadata of adversarial sample and pred
-            # logits (distirbution)
-            sample_data_store[n]["adversarial_samples_results"].append(
-                {
-                    "pred_distribution": softmax(pred, dim=1)
-                    .cpu()
-                    .squeeze()
-                    .tolist(),
-                    "pred_correct": pred_correct,
-                    "replaced_frames_count": replaced_frames_count,
-                    "replaced_frames_idxes": replaced_frames_idxes,
-                    "current_attack_replace_idx": replace_idx,
-                }
+
+            idx_to_replace_combinations = list(
+                combinations(range(REPEATS), evaluated_noise_level)
             )
-            process_data_recorded_by_hooks(
-                hooked_layers=hooked_layers,
-                save_path=results_path,
-                sample_idx=n,
-                label=target,
-                is_correct=pred_correct,
-                noise_level=replaced_frames_count / REPEATS,
+            max_combinations_to_evaluate = max(
+                1, N_ITERS_NOISE_INJECTION + 1 - evaluated_noise_level
             )
-            clear_hook_container(hooked_layers)
-            if not pred_correct:
-                attack_end = True
+            idx_to_replace_combinations = idx_to_replace_combinations[
+                :max_combinations_to_evaluate
+            ]
+
+            for replace_idxes in idx_to_replace_combinations:
+                for replace_idx in replace_idxes:
+                    adversarial_img[replace_idx] = generate_random_frame(img)
+                # predict
+
+                pred = model(adversarial_img).mean(dim=0)
+                pred_correct = is_pred_correct(pred, target)
+                # save metadata of adversarial sample and pred
+                # logits (distirbution)
+                process_data_recorded_by_hooks_for_avg(
+                    hooked_layers=hooked_layers,
+                    summed_results_hooked_layers=summed_results_hooked_layers,
+                )
+                clear_hook_container(hooked_layers)
+                functional.reset_net(model)
+                # aggresive stop condition - if a single prediction among evaluated ones for averaging is incorrect
+                if not pred_correct:
+                    attack_end = True
+                    break
+
+                adversarial_img = img.clone()
+
+        process_data_recorded_by_hooks_avg(
+            summed_results_hooked_layers=summed_results_hooked_layers,
+            n_sample_repeats=N_ITERS_NOISE_INJECTION,
+            save_path=results_path,
+            sample_idx=n,
+            label=target,
+            is_correct=pred_correct,
+            noise_level=evaluated_noise_level / REPEATS,
+        )
+        evaluated_noise_level += 1
 
         with open(json_results_path, "w") as f:
             json.dump(sample_data_store, f, indent=4)
@@ -230,7 +290,7 @@ if __name__ == "__main__":
     mnist_test_set = MNISTRepeated(
         root="./data", train=False, repeat=REPEATS, download=True
     )
-    results_path = "./results/"
+    results_path = "./results_avg/"
     if not os.path.exists(results_path):
         os.makedirs(results_path)
 
