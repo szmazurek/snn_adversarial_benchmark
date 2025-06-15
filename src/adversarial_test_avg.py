@@ -17,6 +17,7 @@ from typing import List, Dict
 
 REPEATS = 10
 N_ITERS_NOISE_INJECTION = 10
+N_SAMPLES_TO_ASSES = 2000
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -186,6 +187,8 @@ def adversarial_attack_test(
     )
 
     for n, (img, target) in enumerate(progbar):
+        if n >= N_SAMPLES_TO_ASSES:
+            break
         img = img.unsqueeze(1).to(DEVICE)
         pred_original = model(img).mean(dim=0)
         pred_correct = is_pred_correct(pred_original, target)
@@ -268,7 +271,7 @@ def adversarial_attack_test(
 if __name__ == "__main__":
     model: nn.Module = SewResnet18(n_channels=1)
     functional.set_step_mode(model, step_mode="m")
-    model.load_state_dict(torch.load("../checkpoints/best_model.pth"))
+    model.load_state_dict(torch.load("./checkpoints/best_model.pth"))
     model.to(DEVICE)
     mnist_test_set = MNISTRepeated(
         root="./data", train=False, repeat=REPEATS, download=True
