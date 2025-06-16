@@ -1,4 +1,5 @@
 *results/
+*results_avg*/
 **__pycache__**
 **venv**
 .vscode/
@@ -7,3 +8,4 @@ data/
 *sh
 *.out
 *.err
+*.tar.gz

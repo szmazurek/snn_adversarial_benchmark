@@ -48,8 +48,7 @@ def compute_average_layer_correlation_scores(
             unit="samples",
         )
         for sample_dir in progbar:
-            if samples_in_current_label_dir >= 2:
-                break
+
             sample_dir_path = joinpath(label_dir_path, sample_dir)
             if not os.path.isdir(sample_dir_path):
                 continue
