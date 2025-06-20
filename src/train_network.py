@@ -9,10 +9,12 @@ from early_stopping_pytorch import EarlyStopping
 import argparse
 from typing import Dict, Callable, Any
 
-from datasets import MNISTRepeated
+from datasets import DatasetFactory
 from models import SewResnet18
 
 MODEL_MAP: Dict[str, Callable[[Any], nn.Module]] = {"sew_resnet": SewResnet18}
+SINGLE_CHANNEL_DATASETS = ["MNIST", "FashionMNIST", "KMNIST"]
+
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -97,22 +99,30 @@ def main(args):
     checkpoint_path = os.path.join(
         args.checkpoint_dir, f"{args.experiment_name}_best_{args.model}.pth"
     )
-    model = MODEL_MAP[args.model](n_channels=1).to(DEVICE)
+    model = MODEL_MAP[args.model](
+        n_channels=1 if args.dataset in SINGLE_CHANNEL_DATASETS else 3
+    ).to(DEVICE)
     functional.set_step_mode(model, step_mode="m")
 
-    mnist_dataset_repeat_train_full = MNISTRepeated(
-        root="./data", train=True, repeat=args.repeats, download=True
+    dataset_repeat_train_full = DatasetFactory.create_dataset(
+        name=args.dataset,
+        root="./data",
+        train=True,
+        repeat=args.repeats,
+        download=True,
     )
-    mnist_dataset_repeat_test = MNISTRepeated(
-        root="./data", train=False, repeat=args.repeats, download=True
+    dataset_repeat_test = DatasetFactory.create_dataset(
+        name=args.dataset,
+        root="./data",
+        train=False,
+        repeat=args.repeats,
+        download=True,
     )
 
-    train_size = int(
-        (1 - args.val_split) * len(mnist_dataset_repeat_train_full)
-    )
-    val_size = len(mnist_dataset_repeat_train_full) - train_size
+    train_size = int((1 - args.val_split) * len(dataset_repeat_train_full))
+    val_size = len(dataset_repeat_train_full) - train_size
     train_dataset, val_dataset = random_split(
-        mnist_dataset_repeat_train_full, [train_size, val_size]
+        dataset_repeat_train_full, [train_size, val_size]
     )
 
     train_loader = DataLoader(
@@ -128,7 +138,7 @@ def main(args):
         num_workers=args.num_workers,
     )
     test_loader = DataLoader(
-        mnist_dataset_repeat_test,
+        dataset_repeat_test,
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.num_workers,
@@ -218,6 +228,13 @@ if __name__ == "__main__":
         default="sew_resnet",
         choices=MODEL_MAP.keys(),
         help=f"Model architecture to use. Available options: {', '.join(MODEL_MAP.keys())}",
+    )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default="MNIST",
+        choices=["MNIST", "CIFAR10"],
+        help="Dataset to use for training and testing",
     )
     parser.add_argument(
         "--checkpoint_dir",
