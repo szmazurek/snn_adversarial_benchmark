@@ -1,6 +1,8 @@
 from torchvision import transforms
 from torchvision.datasets import MNIST, CIFAR10
 
+SINGLE_CHANNEL_DATASETS = ["MNIST", "FashionMNIST", "KMNIST"]
+
 
 class MNISTRepeated(MNIST):
     def __init__(self, *args, repeat=1, **kwargs):
@@ -17,11 +19,9 @@ class MNISTRepeated(MNIST):
     def __getitem__(self, index):
         img, target = super().__getitem__(index)
 
-        img_tensor = self.transform_pipeline(img)
+        img_tensor = self.transform_pipeline(img).unsqueeze(0)
 
-        img_tensor = img_tensor.squeeze(0)
-
-        img_tensor = img_tensor.repeat(self.repeat, 1, 1).unsqueeze(1)
+        img_tensor = img_tensor.repeat(self.repeat, 1, 1, 1)
 
         return img_tensor, target
 

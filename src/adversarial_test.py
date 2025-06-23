@@ -6,17 +6,17 @@ import numpy as np
 from os.path import join as path_join
 
 import tqdm
-from models import SewResnet18
-from datasets import MNISTRepeated
+from datasets import DatasetFactory
 from random import sample as random_sample
 from spikingjelly.activation_based import functional, neuron
 from torch.nn.functional import softmax
 
 from typing import List, Dict
+from datasets import DatasetFactory, SINGLE_CHANNEL_DATASETS
+from models import MODEL_MAP
+from argparse import ArgumentParser
 
 
-REPEATS = 10
-N_SAMPLES_TO_ASSES = 2000
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -104,8 +104,7 @@ def is_pred_correct(logit, target):
 def generate_random_frame(img):
 
     random_img = torch.randn_like(img[0], dtype=torch.float32, device=DEVICE)
-    # CAUTION: what happens if we go out of the range of 0-1?
-    # Will it crash earlier?
+    # TODO should I standardize with the dataset mean and std?
     random_img = (random_img - random_img.min()) / (
         random_img.max() - random_img.min()
     )
@@ -114,7 +113,9 @@ def generate_random_frame(img):
 
 @torch.no_grad()
 def adversarial_attack_test(
-    model: nn.Module, dataset: torch.utils.data.Dataset, results_path: str
+    args,
+    model: nn.Module,
+    dataset: torch.utils.data.Dataset,
 ):
     model.eval()
     lif_nodes: List[nn.Module] = get_lif_nodes(model)
@@ -129,10 +130,10 @@ def adversarial_attack_test(
         unit="sample",
     )
     json_results_path = path_join(
-        results_path, "adversarial_test_results.json"
+        args.results_dir, "adversarial_test_results.json"
     )
     for n, (img, target) in enumerate(progbar):
-        if n >= N_SAMPLES_TO_ASSES:
+        if n >= args.n_samples_to_asses:
             break
         img = img.unsqueeze(1).to(DEVICE)
         pred_original = model(img).mean(dim=0)
@@ -142,7 +143,7 @@ def adversarial_attack_test(
             continue
         process_data_recorded_by_hooks(
             hooked_layers=hooked_layers,
-            save_path=results_path,
+            save_path=args.results_dir,
             sample_idx=n,
             label=target,
             is_correct=pred_correct,
@@ -180,7 +181,9 @@ def adversarial_attack_test(
             # randomly select a frame to replace
             # (but not the ones already replaced)
             idxs_to_choose = [
-                i for i in range(REPEATS) if i not in replaced_frames_idxes
+                i
+                for i in range(args.repeats)
+                if i not in replaced_frames_idxes
             ]
             if not idxs_to_choose:
                 attack_end = True
@@ -208,11 +211,11 @@ def adversarial_attack_test(
             )
             process_data_recorded_by_hooks(
                 hooked_layers=hooked_layers,
-                save_path=results_path,
+                save_path=args.results_dir,
                 sample_idx=n,
                 label=target,
                 is_correct=pred_correct,
-                noise_level=replaced_frames_count / REPEATS,
+                noise_level=replaced_frames_count / args.repeats,
             )
             clear_hook_container(hooked_layers)
             if not pred_correct:
@@ -223,15 +226,74 @@ def adversarial_attack_test(
 
 
 if __name__ == "__main__":
-    model: nn.Module = SewResnet18(n_channels=1)
-    functional.set_step_mode(model, step_mode="m")
-    model.load_state_dict(torch.load("./checkpoints/best_model.pth"))
-    model.to(DEVICE)
-    mnist_test_set = MNISTRepeated(
-        root="./data", train=False, repeat=REPEATS, download=True
-    )
-    results_path = "./results/"
-    if not os.path.exists(results_path):
-        os.makedirs(results_path)
+    parser = ArgumentParser(description="Adversarial Attack Test Script")
 
-    adversarial_attack_test(model, mnist_test_set, results_path)
+    parser.add_argument(
+        "--n_samples_to_asses",
+        type=int,
+        default=2000,
+        help="Number of samples to assess in the dataset",
+    )
+    parser.add_argument(
+        "--repeats",
+        type=int,
+        default=10,
+        help="Number of repeated frames in the input data",
+    )
+    parser.add_argument(
+        "--experiment_name",
+        type=str,
+        default="default_experiment",
+        help="Name of the experiment, used for checkpointing",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="sew_resnet",
+        choices=MODEL_MAP.keys(),
+        help=f"Model architecture to use. Available options: {', '.join(MODEL_MAP.keys())}",
+    )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default="MNIST",
+        choices=["MNIST", "CIFAR10"],
+        help="Dataset to use for training and testing",
+    )
+    parser.add_argument(
+        "--checkpoint_dir",
+        type=str,
+        default="checkpoints",
+        help="Directory to save checkpoints",
+    )
+    parser.add_argument(
+        "--results_dir",
+        type=str,
+        help="Directory to save results",
+    )
+
+    args = parser.parse_args()
+    model = MODEL_MAP[args.model](
+        n_channels=1 if args.dataset in SINGLE_CHANNEL_DATASETS else 3
+    )
+    functional.set_step_mode(model, step_mode="m")
+    checkpoint_path = path_join(
+        args.checkpoint_dir, f"{args.experiment_name}_best.pth"
+    )
+    if not os.path.exists(checkpoint_path):
+        raise FileNotFoundError(
+            f"Checkpoint file {checkpoint_path} does not exist."
+        )
+    model.load_state_dict(torch.load(checkpoint_path, map_location=DEVICE))
+    model.to(DEVICE)
+    mnist_test_set = DatasetFactory.create_dataset(
+        args.dataset,
+        root="./data",
+        train=False,
+        repeat=args.repeats,
+        download=True,
+    )
+    if not os.path.exists(args.results_dir):
+        os.makedirs(args.results_dir)
+
+    adversarial_attack_test(args, model, mnist_test_set)

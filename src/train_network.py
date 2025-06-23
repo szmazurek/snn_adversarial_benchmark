@@ -7,13 +7,10 @@ from spikingjelly.activation_based import functional
 from torch.utils.data import random_split, DataLoader
 from early_stopping_pytorch import EarlyStopping
 import argparse
-from typing import Dict, Callable, Any
 
-from datasets import DatasetFactory
-from models import SewResnet18
+from datasets import DatasetFactory, SINGLE_CHANNEL_DATASETS
+from models import MODEL_MAP
 
-MODEL_MAP: Dict[str, Callable[[Any], nn.Module]] = {"sew_resnet": SewResnet18}
-SINGLE_CHANNEL_DATASETS = ["MNIST", "FashionMNIST", "KMNIST"]
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -96,11 +93,14 @@ def test_model(model, dataloader, accuracy_metric):
 
 
 def main(args):
+    output_size = 10 if args.dataset in ["MNIST", "CIFAR10"] else 1000
+    n_channels = 1 if args.dataset in SINGLE_CHANNEL_DATASETS else 3
     checkpoint_path = os.path.join(
-        args.checkpoint_dir, f"{args.experiment_name}_best_{args.model}.pth"
+        args.checkpoint_dir, f"{args.experiment_name}_best.pth"
     )
     model = MODEL_MAP[args.model](
-        n_channels=1 if args.dataset in SINGLE_CHANNEL_DATASETS else 3
+        n_channels=n_channels,
+        output_size=output_size,
     ).to(DEVICE)
     functional.set_step_mode(model, step_mode="m")
 
@@ -156,7 +156,7 @@ def main(args):
     early_stopping = EarlyStopping(
         patience=args.patience, path=checkpoint_path, verbose=True
     )
-
+    print("Sample shape:", next(iter(train_loader))[0].shape)
     epoch_progbar = tqdm(range(args.epochs), desc="Epoch")
     for epoch in epoch_progbar:
         train_loss, train_acc = train_epoch(

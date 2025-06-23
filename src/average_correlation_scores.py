@@ -36,10 +36,6 @@ def compute_average_layer_correlation_scores(
         if not os.path.isdir(label_dir_path):
             continue
 
-        if label_dir == "label_3":
-            # skip label 3, as full noise samples result in predicting label 3
-            continue
-
         samples_in_current_label_dir = 0
         progbar = tqdm(
             os.listdir(label_dir_path),

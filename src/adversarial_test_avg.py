@@ -16,7 +16,7 @@ from typing import List, Dict
 
 
 REPEATS = 10
-N_ITERS_NOISE_INJECTION = 10
+N_ITERS_NOISE_INJECTION = 100
 N_SAMPLES_TO_ASSES = 2000
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -235,8 +235,11 @@ def adversarial_attack_test(
             idx_to_replace_combinations = list(
                 combinations(range(REPEATS), evaluated_noise_level)
             )
+            n_samples_to_take = min(
+                len(idx_to_replace_combinations), N_ITERS_NOISE_INJECTION
+            )
             idx_to_replace_combinations = random_sample(
-                idx_to_replace_combinations, N_ITERS_NOISE_INJECTION
+                idx_to_replace_combinations, n_samples_to_take
             )
             preds_correctness = []
             for replace_idxes in idx_to_replace_combinations:
@@ -276,7 +279,7 @@ if __name__ == "__main__":
     mnist_test_set = MNISTRepeated(
         root="./data", train=False, repeat=REPEATS, download=True
     )
-    results_path = "./results_avg/"
+    results_path = "./results_avg_100/"
     if not os.path.exists(results_path):
         os.makedirs(results_path)
 

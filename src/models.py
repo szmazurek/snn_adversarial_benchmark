@@ -1,6 +1,7 @@
 from torch import nn
 from spikingjelly.activation_based import surrogate, neuron, layer
 from spikingjelly.activation_based.model.sew_resnet import sew_resnet18
+from typing import Dict, Callable, Any
 
 
 def SewResnet18(
@@ -25,3 +26,6 @@ def SewResnet18(
     )
     net.fc = layer.Linear(512, output_size)
     return net
+
+
+MODEL_MAP: Dict[str, Callable[[Any], nn.Module]] = {"sew_resnet": SewResnet18}
