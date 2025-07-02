@@ -34,12 +34,14 @@ def SpikingVGG11BN(
     output_size: int = 10,
     neuron_model: neuron.BaseNode = neuron.LIFNode,
     surrogate_function: surrogate.SurrogateFunctionBase = surrogate.Sigmoid,
+    remove_last_pool: int = 2,
 ) -> nn.Module:
     net = spiking_vgg11_bn(
         pretrained=False,
         spiking_neuron=neuron_model,
         surrogate_function=surrogate_function(),
     )
+
     net.features[0] = layer.Conv2d(
         n_channels,
         64,
@@ -49,6 +51,27 @@ def SpikingVGG11BN(
         bias=False,
     )
     net.classifier[6] = layer.Linear(4096, output_size)
+
+    pool_indices: list[int] = [
+        i
+        for i, module in enumerate(net.features)
+        if isinstance(module, nn.MaxPool2d)
+    ]
+
+    if remove_last_pool > 0 and len(pool_indices) >= remove_last_pool:
+        modules_to_keep = []
+        last_pool_index_to_keep = (
+            pool_indices[len(pool_indices) - remove_last_pool]
+            if remove_last_pool < len(pool_indices)
+            else -1
+        )
+        for i, module in enumerate(net.features):
+            if i <= last_pool_index_to_keep or not isinstance(
+                module, nn.MaxPool2d
+            ):
+                modules_to_keep.append(module)
+        net.features = nn.Sequential(*modules_to_keep)
+
     return net
 
 
