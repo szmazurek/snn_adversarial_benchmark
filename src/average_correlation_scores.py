@@ -71,51 +71,55 @@ def compute_average_layer_correlation_scores(
                 for f in os.listdir(original_activities_dir)
                 if "spike" in f
             ]
-            for layer_activity_file in correct_layer_activity_files:
-                parts = os.path.basename(layer_activity_file).split("_")
-                if len(parts) >= 2:
-                    layer_num_str = parts[-1].split(".")[0]
-                    layer_name_prefix = parts[-2]
-                    layer_name = f"{layer_name_prefix}_{layer_num_str}"
-                else:
-                    continue
+            try:
+                for layer_activity_file in correct_layer_activity_files:
+                    parts = os.path.basename(layer_activity_file).split("_")
+                    if len(parts) >= 2:
+                        layer_num_str = parts[-1].split(".")[0]
+                        layer_name_prefix = parts[-2]
+                        layer_name = f"{layer_name_prefix}_{layer_num_str}"
+                    else:
+                        continue
 
-                corr_matrix = compute_correlation_from_activity_matrix(
-                    np.load(layer_activity_file)
-                )
-                if layer_name not in layer_correlations_correct:
-                    layer_correlations_correct[layer_name] = np.zeros_like(
-                        corr_matrix
+                    corr_matrix = compute_correlation_from_activity_matrix(
+                        np.load(layer_activity_file)
                     )
-                    layer_correct_sample_counts[layer_name] = 0
-                layer_correlations_correct[layer_name] += corr_matrix
-                layer_correct_sample_counts[layer_name] += 1
+                    if layer_name not in layer_correlations_correct:
+                        layer_correlations_correct[layer_name] = np.zeros_like(
+                            corr_matrix
+                        )
+                        layer_correct_sample_counts[layer_name] = 0
+                    layer_correlations_correct[layer_name] += corr_matrix
+                    layer_correct_sample_counts[layer_name] += 1
 
-            incorrect_layer_activity_files = [
-                joinpath(incorrect_noise_activities_dir, f)
-                for f in os.listdir(incorrect_noise_activities_dir)
-                if "spike" in f
-            ]
-            for layer_activity_file in incorrect_layer_activity_files:
-                parts = os.path.basename(layer_activity_file).split("_")
-                if len(parts) >= 2:
-                    layer_num_str = parts[-1].split(".")[0]
-                    layer_name_prefix = parts[-2]
-                    layer_name = f"{layer_name_prefix}_{layer_num_str}"
-                else:
-                    continue
+                incorrect_layer_activity_files = [
+                    joinpath(incorrect_noise_activities_dir, f)
+                    for f in os.listdir(incorrect_noise_activities_dir)
+                    if "spike" in f
+                ]
+                for layer_activity_file in incorrect_layer_activity_files:
+                    parts = os.path.basename(layer_activity_file).split("_")
+                    if len(parts) >= 2:
+                        layer_num_str = parts[-1].split(".")[0]
+                        layer_name_prefix = parts[-2]
+                        layer_name = f"{layer_name_prefix}_{layer_num_str}"
+                    else:
+                        continue
 
-                corr_matrix = compute_correlation_from_activity_matrix(
-                    np.load(layer_activity_file)
-                )
-                if layer_name not in layer_correlations_incorrect:
-                    layer_correlations_incorrect[layer_name] = np.zeros_like(
-                        corr_matrix
+                    corr_matrix = compute_correlation_from_activity_matrix(
+                        np.load(layer_activity_file)
                     )
-                    layer_incorrect_sample_counts[layer_name] = 0
-                layer_correlations_incorrect[layer_name] += corr_matrix
-                layer_incorrect_sample_counts[layer_name] += 1
-
+                    if layer_name not in layer_correlations_incorrect:
+                        layer_correlations_incorrect[layer_name] = (
+                            np.zeros_like(corr_matrix)
+                        )
+                        layer_incorrect_sample_counts[layer_name] = 0
+                    layer_correlations_incorrect[layer_name] += corr_matrix
+                    layer_incorrect_sample_counts[layer_name] += 1
+            except Exception as e:
+                print(
+                    f"Error processing sample {sample_dir_path}: {e}, skipping and attempting next sample."
+                )
     for layer_name in layer_correlations_correct:
         if layer_correct_sample_counts[layer_name] > 0:
             layer_correlations_correct[

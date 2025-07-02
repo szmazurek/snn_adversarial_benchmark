@@ -1,26 +1,39 @@
-from torchvision import transforms
+from torchvision.transforms import Compose, ToTensor, Normalize
 from torchvision.datasets import MNIST, CIFAR10
 
 SINGLE_CHANNEL_DATASETS = ["MNIST", "FashionMNIST", "KMNIST"]
 
 
 class MNISTRepeated(MNIST):
-    def __init__(self, *args, repeat=1, **kwargs):
+    def __init__(
+        self, *args, repeat: int = 1, normalize: bool = True, **kwargs
+    ):
         super().__init__(*args, **kwargs)
         self.repeat = repeat
-
-        self.transform_pipeline = transforms.Compose(
-            [
-                transforms.ToTensor(),
-                transforms.Normalize((0.1307,), (0.3081,)),
-            ]
+        self.normalize = normalize
+        self.transform_pipeline = (
+            Compose(
+                [
+                    ToTensor(),
+                    Normalize((0.1307,), (0.3081,)),
+                ]
+            )
+            if normalize
+            else ToTensor()
         )
+        if not self.normalize:
+            print(
+                "Z-score standarization is disabled, will use min max scaling."
+            )
 
     def __getitem__(self, index):
         img, target = super().__getitem__(index)
 
         img_tensor = self.transform_pipeline(img).unsqueeze(0)
-
+        if not self.normalize:
+            img_tensor = (img_tensor - img_tensor.min()) / (
+                img_tensor.max() - img_tensor.min()
+            )
         img_tensor = img_tensor.repeat(self.repeat, 1, 1, 1)
 
         return img_tensor, target
@@ -28,24 +41,41 @@ class MNISTRepeated(MNIST):
 
 class CIFAR10Repeated(CIFAR10):
 
-    def __init__(self, *args, repeat=1, **kwargs):
+    def __init__(
+        self, *args, repeat: int = 1, normalize: bool = True, **kwargs
+    ):
 
         super().__init__(*args, transform=None, **kwargs)
 
         self.repeat = repeat
-        self.transform_pipeline = transforms.Compose(
-            [
-                transforms.ToTensor(),
-                transforms.Normalize(
-                    (0.4914, 0.4822, 0.4465), (0.2470, 0.2435, 0.2616)
-                ),
-            ]
+        self.normalize = normalize
+        self.transform_pipeline = (
+            Compose(
+                [
+                    ToTensor(),
+                    Normalize(
+                        (0.4914, 0.4822, 0.4465), (0.2470, 0.2435, 0.2616)
+                    ),
+                ]
+            )
+            if normalize
+            else ToTensor()
         )
+
+        if not self.normalize:
+            print(
+                "Z-score standarization is disabled, will use min max scaling."
+            )
 
     def __getitem__(self, index):
         img, target = super().__getitem__(index)
 
         img_tensor = self.transform_pipeline(img).unsqueeze(0)
+        if not self.normalize:
+            img_tensor = (img_tensor - img_tensor.min()) / (
+                img_tensor.max() - img_tensor.min()
+            )
+
         repeated_img_tensor = img_tensor.repeat(self.repeat, 1, 1, 1)
 
         return repeated_img_tensor, target

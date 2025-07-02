@@ -1,7 +1,7 @@
 import os
 import torch
 from tqdm import tqdm
-from torch import nn
+from torch import nn, normal
 from torchmetrics import Accuracy
 from spikingjelly.activation_based import functional
 from torch.utils.data import random_split, DataLoader
@@ -34,8 +34,7 @@ def train_epoch(
         epoch_targets.append(target)
         functional.reset_net(model)
         dataloader_progbar.set_postfix(loss=loss.cpu().item())
-        if (n + 1) % 200 == 0:
-            break
+
     epoch_preds = torch.cat(epoch_preds).to(DEVICE)
     epoch_targets = torch.cat(epoch_targets).to(DEVICE)
     epoch_loss /= len(dataloader)
@@ -106,6 +105,7 @@ def main(args):
 
     dataset_repeat_train_full = DatasetFactory.create_dataset(
         name=args.dataset,
+        normalize=args.normalize,
         root="./data",
         train=True,
         repeat=args.repeats,
@@ -113,6 +113,7 @@ def main(args):
     )
     dataset_repeat_test = DatasetFactory.create_dataset(
         name=args.dataset,
+        normalize=args.normalize,
         root="./data",
         train=False,
         repeat=args.repeats,
@@ -235,6 +236,11 @@ if __name__ == "__main__":
         default="MNIST",
         choices=["MNIST", "CIFAR10"],
         help="Dataset to use for training and testing",
+    )
+    parser.add_argument(
+        "--normalize",
+        action="store_true",
+        help="Whether to z-score normalize the dataset. If false, min-max scaling is applied.",
     )
     parser.add_argument(
         "--checkpoint_dir",
