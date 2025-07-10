@@ -1,3 +1,4 @@
+from locale import normalize
 import os
 import json
 import torch
@@ -267,6 +268,11 @@ if __name__ == "__main__":
         help="Directory to save checkpoints",
     )
     parser.add_argument(
+        "--normalize",
+        action="store_true",
+        help="Whether to z-score normalize the dataset. If false, min-max scaling is applied.",
+    )
+    parser.add_argument(
         "--results_dir",
         type=str,
         help="Directory to save results",
@@ -292,6 +298,7 @@ if __name__ == "__main__":
         train=False,
         repeat=args.repeats,
         download=True,
+        normalize=args.normalize,
     )
     if not os.path.exists(args.results_dir):
         os.makedirs(args.results_dir)
