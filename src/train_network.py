@@ -1,4 +1,5 @@
 import os
+from matplotlib.pylab import f
 import torch
 from tqdm import tqdm
 from torch import nn, normal
@@ -182,7 +183,7 @@ def main(args):
     model.load_state_dict(torch.load(checkpoint_path))
     test_model(model, test_loader, accuracy_metric)
 
-    print("Training finished")
+    print(f"Training finished for {args.experiment_name}.")
 
 
 if __name__ == "__main__":
@@ -257,4 +258,5 @@ if __name__ == "__main__":
     # Instantiate the chosen model
     if args.model not in MODEL_MAP:
         raise ValueError(f"Model '{args.model}' not found in MODEL_MAP.")
+    print(f"Using model: {args.model}, Dataset: {args.dataset}")
     main(args)
