@@ -23,17 +23,13 @@ class MNISTRepeated(MNIST):
         )
         if not self.normalize:
             print(
-                "Z-score standarization is disabled, will use min max scaling."
+                "Z-score standarization is disabled, will use unchanged pixel values."
             )
 
     def __getitem__(self, index):
         img, target = super().__getitem__(index)
 
         img_tensor = self.transform_pipeline(img).unsqueeze(0)
-        if not self.normalize:
-            img_tensor = (img_tensor - img_tensor.min()) / (
-                img_tensor.max() - img_tensor.min()
-            )
         img_tensor = img_tensor.repeat(self.repeat, 1, 1, 1)
 
         return img_tensor, target
@@ -64,17 +60,13 @@ class CIFAR10Repeated(CIFAR10):
 
         if not self.normalize:
             print(
-                "Z-score standarization is disabled, will use min max scaling."
+                "Z-score standarization is disabled, will use unchanged pixel values."
             )
 
     def __getitem__(self, index):
         img, target = super().__getitem__(index)
 
         img_tensor = self.transform_pipeline(img).unsqueeze(0)
-        if not self.normalize:
-            img_tensor = (img_tensor - img_tensor.min()) / (
-                img_tensor.max() - img_tensor.min()
-            )
 
         repeated_img_tensor = img_tensor.repeat(self.repeat, 1, 1, 1)
 

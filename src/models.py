@@ -1,5 +1,7 @@
+from optree import FlattenedEntry
+from sympy import flatten
 from torch import nn
-from spikingjelly.activation_based import surrogate, neuron, layer
+from spikingjelly.activation_based import surrogate, neuron, layer, encoding
 from spikingjelly.activation_based.model.sew_resnet import sew_resnet18
 from spikingjelly.activation_based.model.spiking_vgg import spiking_vgg11_bn
 from typing import Dict, Callable, Any
@@ -100,8 +102,51 @@ def SimpleConvSNN(
     return net
 
 
+def _simple_MLP_SNN(
+    n_channels: int = 784,
+    output_size: int = 10,
+    neuron_model: neuron.BaseNode = neuron.LIFNode,
+    surrogate_function: surrogate.SurrogateFunctionBase = surrogate.ATan,
+) -> nn.Module:
+    net = nn.Sequential(
+        layer.Linear(n_channels, 512),
+        layer.BatchNorm1d(512),
+        neuron_model(surrogate_function=surrogate_function()),
+        layer.Linear(512, 256),
+        layer.BatchNorm1d(256),
+        neuron_model(surrogate_function=surrogate_function()),
+        layer.Linear(256, output_size),
+    )
+    return net
+
+
+class SimpleMLPSNN(nn.Module):
+    def __init__(
+        self,
+        n_channels: int = 784,
+        output_size: int = 10,
+        neuron_model: neuron.BaseNode = neuron.LIFNode,
+        surrogate_function: surrogate.SurrogateFunctionBase = surrogate.ATan,
+    ):
+        super(SimpleMLPSNN, self).__init__()
+        self.model = _simple_MLP_SNN(
+            n_channels=n_channels,
+            output_size=output_size,
+            neuron_model=neuron_model,
+            surrogate_function=surrogate_function,
+        )
+        self.encoder = encoding.PoissonEncoder()
+        self.flatten = layer.Flatten()
+
+    def forward(self, x):
+        poisson_spikes = self.encoder(x)
+        flattened_spikes = self.flatten(poisson_spikes)
+        return self.model(flattened_spikes)
+
+
 MODEL_MAP: Dict[str, Callable[[Any], nn.Module]] = {
     "sew_resnet": SewResnet18,
     "spiking_vgg": SpikingVGG11BN,
     "simple_conv_snn": SimpleConvSNN,
+    "simple_mlp_snn": SimpleMLPSNN,
 }
