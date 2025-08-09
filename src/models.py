@@ -1,5 +1,3 @@
-from optree import FlattenedEntry
-from sympy import flatten
 from torch import nn
 from spikingjelly.activation_based import surrogate, neuron, layer, encoding
 from spikingjelly.activation_based.model.sew_resnet import sew_resnet18

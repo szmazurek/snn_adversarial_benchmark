@@ -1,4 +1,3 @@
-from locale import normalize
 import os
 import json
 import torch
@@ -13,8 +12,9 @@ from spikingjelly.activation_based import functional, neuron
 from torch.nn.functional import softmax
 
 from typing import List, Dict
-from datasets import DatasetFactory, SINGLE_CHANNEL_DATASETS
+from datasets import DatasetFactory
 from models import MODEL_MAP
+from utils import determine_input_size
 from argparse import ArgumentParser
 
 
@@ -133,8 +133,9 @@ def adversarial_attack_test(
     json_results_path = path_join(
         args.results_dir, "adversarial_test_results.json"
     )
+    correct_preds = 0
     for n, (img, target) in enumerate(progbar):
-        if n >= args.n_samples_to_asses:
+        if correct_preds >= args.n_samples_to_asses:
             break
         img = img.unsqueeze(1).to(DEVICE)
         pred_original = model(img).mean(dim=0)
@@ -142,6 +143,7 @@ def adversarial_attack_test(
 
         if not pred_correct:
             continue
+        correct_preds += 1
         process_data_recorded_by_hooks(
             hooked_layers=hooked_layers,
             save_path=args.results_dir,
@@ -280,7 +282,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     model = MODEL_MAP[args.model](
-        n_channels=1 if args.dataset in SINGLE_CHANNEL_DATASETS else 3
+        n_channels=determine_input_size(args.dataset, args.model),
     )
     functional.set_step_mode(model, step_mode="m")
     checkpoint_path = path_join(
