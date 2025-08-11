@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import cupy as cp
 from os.path import join as joinpath
 import argparse
 from tqdm import tqdm
@@ -12,9 +13,8 @@ def compute_correlation_from_activity_matrix(activity_matrix):
         activity_matrix = activity_matrix[0]
 
     activity_matrix = activity_matrix.reshape(activity_matrix.shape[0], -1)
-
-    corr_matrix = np.corrcoef(activity_matrix.T)
-    corr_matrix[np.isnan(corr_matrix)] = 0
+    corr_matrix = cp.corrcoef(activity_matrix.T)
+    corr_matrix[cp.isnan(corr_matrix)] = 0
     return corr_matrix
 
 
@@ -82,10 +82,10 @@ def compute_average_layer_correlation_scores(
                         continue
 
                     corr_matrix = compute_correlation_from_activity_matrix(
-                        np.load(layer_activity_file)
+                        cp.asarray(np.load(layer_activity_file))
                     )
                     if layer_name not in layer_correlations_correct:
-                        layer_correlations_correct[layer_name] = np.zeros_like(
+                        layer_correlations_correct[layer_name] = cp.zeros_like(
                             corr_matrix
                         )
                         layer_correct_sample_counts[layer_name] = 0
@@ -107,11 +107,11 @@ def compute_average_layer_correlation_scores(
                         continue
 
                     corr_matrix = compute_correlation_from_activity_matrix(
-                        np.load(layer_activity_file)
+                        cp.asarray(np.load(layer_activity_file))
                     )
                     if layer_name not in layer_correlations_incorrect:
                         layer_correlations_incorrect[layer_name] = (
-                            np.zeros_like(corr_matrix)
+                            cp.zeros_like(corr_matrix)
                         )
                         layer_incorrect_sample_counts[layer_name] = 0
                     layer_correlations_incorrect[layer_name] += corr_matrix
@@ -139,14 +139,14 @@ def compute_average_layer_correlation_scores(
                 joinpath(
                     save_dir, f"{layer_name}_correct_avg_correlation.npy"
                 ),
-                corr_matrix,
+                corr_matrix.get(),
             )
         for layer_name, corr_matrix in layer_correlations_incorrect.items():
             np.save(
                 joinpath(
                     save_dir, f"{layer_name}_incorrect_avg_correlation.npy"
                 ),
-                corr_matrix,
+                corr_matrix.get(),
             )
 
     return layer_correlations_correct, layer_correlations_incorrect

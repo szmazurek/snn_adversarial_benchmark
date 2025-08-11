@@ -1,4 +1,4 @@
-*results/
+*results*/
 *results_avg*/
 **__pycache__**
 **venv**
