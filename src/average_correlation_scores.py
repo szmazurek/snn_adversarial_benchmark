@@ -5,6 +5,26 @@ from os.path import join as joinpath
 import argparse
 from tqdm import tqdm
 
+
+if int(os.environ.get("CUPY_ENABLE_UMP", 0)) == 1:
+    import cupy._core.numpy_allocator as ac
+    import numpy_allocator
+    import ctypes
+
+    cp.cuda.set_allocator(
+        cp.cuda.MemoryPool(cp.cuda.memory.malloc_system).malloc
+    )
+
+    lib = ctypes.CDLL(ac.__file__)
+
+    class my_allocator(metaclass=numpy_allocator.type):
+        _calloc_ = ctypes.addressof(lib._calloc)
+        _malloc_ = ctypes.addressof(lib._malloc)
+        _realloc_ = ctypes.addressof(lib._realloc)
+        _free_ = ctypes.addressof(lib._free)
+
+    my_allocator.__enter__()  # change the allocator globally
+
 FIRST_DIM_TARGET_SIZE = 10
 
 
@@ -71,8 +91,14 @@ def compute_average_layer_correlation_scores(
                 for f in os.listdir(original_activities_dir)
                 if "spike" in f
             ]
+            # sort the files using int before the extension and after the last underscore
+            correct_layer_activity_files.sort(
+                key=lambda x: int(
+                    os.path.basename(x).split("_")[-1].split(".")[0]
+                )
+            )
             try:
-                for layer_activity_file in correct_layer_activity_files:
+                for layer_activity_file in correct_layer_activity_files[-1:]:
                     parts = os.path.basename(layer_activity_file).split("_")
                     if len(parts) >= 2:
                         layer_num_str = parts[-1].split(".")[0]
@@ -97,7 +123,12 @@ def compute_average_layer_correlation_scores(
                     for f in os.listdir(incorrect_noise_activities_dir)
                     if "spike" in f
                 ]
-                for layer_activity_file in incorrect_layer_activity_files:
+                incorrect_layer_activity_files.sort(
+                    key=lambda x: int(
+                        os.path.basename(x).split("_")[-1].split(".")[0]
+                    )
+                )
+                for layer_activity_file in incorrect_layer_activity_files[-1:]:
                     parts = os.path.basename(layer_activity_file).split("_")
                     if len(parts) >= 2:
                         layer_num_str = parts[-1].split(".")[0]

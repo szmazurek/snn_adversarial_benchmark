@@ -113,7 +113,10 @@ def _simple_MLP_SNN(
         layer.Linear(512, 256),
         layer.BatchNorm1d(256),
         neuron_model(surrogate_function=surrogate_function()),
-        layer.Linear(256, output_size),
+        layer.Linear(256, 64),
+        layer.BatchNorm1d(64),
+        neuron_model(surrogate_function=surrogate_function()),
+        layer.Linear(64, output_size),
     )
     return net
 
