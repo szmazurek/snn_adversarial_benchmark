@@ -184,6 +184,30 @@ def _simple_MLP_SNN_recurrent(
     return net
 
 
+class SimpleMLPSNNRecurrent(nn.Module):
+    def __init__(
+        self,
+        n_channels: int = 784,
+        output_size: int = 10,
+        neuron_model: neuron.BaseNode = neuron.LIFNode,
+        surrogate_function: surrogate.SurrogateFunctionBase = surrogate.ATan,
+    ):
+        super(SimpleMLPSNNRecurrent, self).__init__()
+        self.model = _simple_MLP_SNN_recurrent(
+            n_channels=n_channels,
+            output_size=output_size,
+            neuron_model=neuron_model,
+            surrogate_function=surrogate_function,
+        )
+        self.encoder = encoding.PoissonEncoder()
+        self.flatten = layer.Flatten()
+
+    def forward(self, x):
+        poisson_spikes = self.encoder(x)
+        flattened_spikes = self.flatten(poisson_spikes)
+        return self.model(flattened_spikes)
+
+
 class SimpleMLPSNN(nn.Module):
     def __init__(
         self,
@@ -214,4 +238,5 @@ MODEL_MAP: Dict[str, Callable[[Any], nn.Module]] = {
     "simple_conv_snn": SimpleConvSNN,
     "simple_mlp_snn": SimpleMLPSNN,
     "simple_conv_snn_recurrent": SimpleConvSNNRecurrent,
+    "simple_mlp_snn_recurrent": SimpleMLPSNNRecurrent,
 }
