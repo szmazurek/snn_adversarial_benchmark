@@ -3,6 +3,7 @@ import numpy as np
 import cupy as cp
 from os.path import join as joinpath
 import argparse
+import json
 from tqdm import tqdm
 
 
@@ -38,6 +39,15 @@ def compute_correlation_from_activity_matrix(activity_matrix):
     return corr_matrix
 
 
+def compute_matrix_rank(matrix):
+    """
+    Compute the rank of a matrix using SVD.
+    """
+    s = cp.linalg.svd(matrix, compute_uv=False)
+    rank = cp.sum(s > 1e-10)
+    return rank
+
+
 def compute_average_layer_correlation_scores(
     root_data_path: str, save_dir: str = None
 ):
@@ -47,6 +57,8 @@ def compute_average_layer_correlation_scores(
     layer_correct_sample_counts = {}
     layer_incorrect_sample_counts = {}
 
+    layer_correct_hard_ranks = {}
+    layer_incorrect_hard_ranks = {}
     total_samples_processed = 0
 
     for label_dir in os.listdir(root_data_path):
@@ -110,6 +122,11 @@ def compute_average_layer_correlation_scores(
                     corr_matrix = compute_correlation_from_activity_matrix(
                         cp.asarray(np.load(layer_activity_file))
                     )
+                    matrix_rank = compute_matrix_rank(corr_matrix)
+                    if layer_name not in layer_correct_hard_ranks:
+                        layer_correct_hard_ranks[layer_name] = []
+                    layer_correct_hard_ranks[layer_name].append(matrix_rank)
+
                     if layer_name not in layer_correlations_correct:
                         layer_correlations_correct[layer_name] = cp.zeros_like(
                             corr_matrix
@@ -140,6 +157,11 @@ def compute_average_layer_correlation_scores(
                     corr_matrix = compute_correlation_from_activity_matrix(
                         cp.asarray(np.load(layer_activity_file))
                     )
+                    matrix_rank = compute_matrix_rank(corr_matrix)
+                    if layer_name not in layer_incorrect_hard_ranks:
+                        layer_incorrect_hard_ranks[layer_name] = []
+                    layer_incorrect_hard_ranks[layer_name].append(matrix_rank)
+
                     if layer_name not in layer_correlations_incorrect:
                         layer_correlations_incorrect[layer_name] = (
                             cp.zeros_like(corr_matrix)
@@ -163,6 +185,15 @@ def compute_average_layer_correlation_scores(
                 layer_name
             ] /= layer_incorrect_sample_counts[layer_name]
 
+    for layer_name in layer_correct_hard_ranks:
+        layer_correct_hard_ranks[layer_name] = cp.mean(
+            cp.asarray(layer_correct_hard_ranks[layer_name])
+        )
+    for layer_name in layer_incorrect_hard_ranks:
+        layer_incorrect_hard_ranks[layer_name] = cp.mean(
+            cp.asarray(layer_incorrect_hard_ranks[layer_name])
+        )
+
     if save_dir:
         os.makedirs(save_dir, exist_ok=True)
         for layer_name, corr_matrix in layer_correlations_correct.items():
@@ -178,6 +209,15 @@ def compute_average_layer_correlation_scores(
                     save_dir, f"{layer_name}_incorrect_avg_correlation.npy"
                 ),
                 corr_matrix.get(),
+            )
+
+        with open(joinpath(save_dir, "correct_hard_ranks.json"), "w") as f:
+            json.dump(
+                {k: float(v) for k, v in layer_correct_hard_ranks.items()}, f
+            )
+        with open(joinpath(save_dir, "incorrect_hard_ranks.json"), "w") as f:
+            json.dump(
+                {k: float(v) for k, v in layer_incorrect_hard_ranks.items()}, f
             )
 
     return layer_correlations_correct, layer_correlations_incorrect
