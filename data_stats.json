@@ -1,0 +1,11 @@
+{
+    "NMNIST": {
+        "frames_per_sample": 10,
+        "split_by": "time",
+        "mean_on": 0.180647,
+        "mean_off": 0.180247,
+        "stdev_on": 0.753486,
+        "stdev_off": 0.696370
+        
+    }
+}

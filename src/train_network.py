@@ -94,7 +94,12 @@ def test_model(model, dataloader, accuracy_metric):
 
 
 def main(args):
-    output_size = 10 if args.dataset in ["MNIST", "CIFAR10"] else 1000
+    output_size = (
+        10 if args.dataset in ["MNIST", "CIFAR10", "EventMNIST"] else None
+    )
+    assert (
+        output_size is not None
+    ), "Output size must be specified for the dataset."
     n_channels = determine_input_size(args.dataset, args.model)
     checkpoint_path = os.path.join(
         args.checkpoint_dir, f"{args.experiment_name}_best.pth"
@@ -102,6 +107,7 @@ def main(args):
     model = MODEL_MAP[args.model](
         n_channels=n_channels,
         output_size=output_size,
+        native_dvs_input=DatasetFactory.is_native_dvs(args.dataset),
     ).to(DEVICE)
     functional.set_step_mode(model, step_mode="m")
 
@@ -236,7 +242,7 @@ if __name__ == "__main__":
         "--dataset",
         type=str,
         default="MNIST",
-        choices=["MNIST", "CIFAR10"],
+        choices=DatasetFactory.available_datasets(),
         help="Dataset to use for training and testing",
     )
     parser.add_argument(

@@ -81,6 +81,7 @@ def SimpleConvSNN(
     output_size: int = 10,
     neuron_model: neuron.BaseNode = neuron.LIFNode,
     surrogate_function: surrogate.SurrogateFunctionBase = surrogate.ATan,
+    native_dvs_input: bool = False,
 ) -> nn.Module:
     net = nn.Sequential(
         layer.Conv2d(n_channels, 64, kernel_size=3, padding=1, bias=False),
@@ -98,6 +99,10 @@ def SimpleConvSNN(
         neuron_model(surrogate_function=surrogate_function()),
         layer.Linear(64, output_size),
     )
+    if not native_dvs_input:
+        encoder = encoding.PoissonEncoder()
+        flatten = layer.Flatten()
+        net = nn.Sequential(encoder, flatten, net)
     return net
 
 
@@ -106,6 +111,7 @@ def SimpleConvSNNRecurrent(
     output_size: int = 10,
     neuron_model: neuron.BaseNode = neuron.LIFNode,
     surrogate_function: surrogate.SurrogateFunctionBase = surrogate.ATan,
+    native_dvs_input: bool = False,
 ) -> nn.Module:
     net = nn.Sequential(
         layer.Conv2d(n_channels, 64, kernel_size=3, padding=1, bias=False),
@@ -127,6 +133,10 @@ def SimpleConvSNNRecurrent(
         ),
         layer.Linear(64, output_size),
     )
+    if not native_dvs_input:
+        encoder = encoding.PoissonEncoder()
+        flatten = layer.Flatten()
+        net = nn.Sequential(encoder, flatten, net)
     return net
 
 
@@ -135,6 +145,7 @@ def _simple_MLP_SNN(
     output_size: int = 10,
     neuron_model: neuron.BaseNode = neuron.LIFNode,
     surrogate_function: surrogate.SurrogateFunctionBase = surrogate.ATan,
+    native_dvs_input: bool = False,
 ) -> nn.Module:
     net = nn.Sequential(
         layer.Linear(n_channels, 512),
@@ -148,6 +159,10 @@ def _simple_MLP_SNN(
         neuron_model(surrogate_function=surrogate_function()),
         layer.Linear(64, output_size),
     )
+    if not native_dvs_input:
+        encoder = encoding.PoissonEncoder()
+        flatten = layer.Flatten()
+        net = nn.Sequential(encoder, flatten, net)
     return net
 
 
@@ -156,6 +171,7 @@ def _simple_MLP_SNN_recurrent(
     output_size: int = 10,
     neuron_model: neuron.BaseNode = neuron.LIFNode,
     surrogate_function: surrogate.SurrogateFunctionBase = surrogate.ATan,
+    native_dvs_input: bool = False,
 ) -> nn.Module:
     net = nn.Sequential(
         layer.Linear(n_channels, 512),
@@ -181,6 +197,10 @@ def _simple_MLP_SNN_recurrent(
         ),
         layer.Linear(64, output_size),
     )
+    if not native_dvs_input:
+        encoder = encoding.PoissonEncoder()
+        flatten = layer.Flatten()
+        net = nn.Sequential(encoder, flatten, net)
     return net
 
 
@@ -191,6 +211,7 @@ class SimpleMLPSNNRecurrent(nn.Module):
         output_size: int = 10,
         neuron_model: neuron.BaseNode = neuron.LIFNode,
         surrogate_function: surrogate.SurrogateFunctionBase = surrogate.ATan,
+        native_dvs_input: bool = False,
     ):
         super(SimpleMLPSNNRecurrent, self).__init__()
         self.model = _simple_MLP_SNN_recurrent(
@@ -201,11 +222,14 @@ class SimpleMLPSNNRecurrent(nn.Module):
         )
         self.encoder = encoding.PoissonEncoder()
         self.flatten = layer.Flatten()
+        self.native_dvs_input = native_dvs_input
 
     def forward(self, x):
-        poisson_spikes = self.encoder(x)
-        flattened_spikes = self.flatten(poisson_spikes)
-        return self.model(flattened_spikes)
+
+        if not self.native_dvs_input:
+            poisson_spikes = self.encoder(x)
+            x = self.flatten(poisson_spikes)
+        return self.model(x)
 
 
 class SimpleMLPSNN(nn.Module):
@@ -215,6 +239,7 @@ class SimpleMLPSNN(nn.Module):
         output_size: int = 10,
         neuron_model: neuron.BaseNode = neuron.LIFNode,
         surrogate_function: surrogate.SurrogateFunctionBase = surrogate.ATan,
+        native_dvs_input: bool = False,
     ):
         super(SimpleMLPSNN, self).__init__()
         self.model = _simple_MLP_SNN(
@@ -225,11 +250,13 @@ class SimpleMLPSNN(nn.Module):
         )
         self.encoder = encoding.PoissonEncoder()
         self.flatten = layer.Flatten()
+        self.native_dvs_input = native_dvs_input
 
     def forward(self, x):
-        poisson_spikes = self.encoder(x)
-        flattened_spikes = self.flatten(poisson_spikes)
-        return self.model(flattened_spikes)
+        if not self.native_dvs_input:
+            poisson_spikes = self.encoder(x)
+            x = self.flatten(poisson_spikes)
+        return self.model(x)
 
 
 MODEL_MAP: Dict[str, Callable[[Any], nn.Module]] = {

@@ -7,7 +7,7 @@ from os.path import join as path_join
 
 import tqdm
 from datasets import DatasetFactory
-from random import sample as random_sample
+from random import sample as random_sample, shuffle
 from spikingjelly.activation_based import functional, neuron
 from torch.nn.functional import softmax
 
@@ -104,12 +104,25 @@ def is_pred_correct(logit, target):
 
 def generate_random_frame(img):
 
-    random_img = torch.randn_like(img[0], dtype=torch.float32, device=DEVICE)
+    random_img = torch.rand_like(img[0], dtype=torch.float32, device=DEVICE)
     # TODO should I standardize with the dataset mean and std?
     random_img = (random_img - random_img.min()) / (
         random_img.max() - random_img.min()
     )
     return random_img
+
+
+def generate_noisy_frame_permute(img):
+    """
+    Given an image tensor of shape (C, H, W), this function randomly permutes the pixel values
+    in each channel independently.
+    """
+    flattened_img = img.view(img.size(0), -1)
+    channel_dim, all_pixels = flattened_img.size()
+    perm_indices = torch.rand(channel_dim, all_pixels).argsort(dim=1)
+    permuted_flattened_img = torch.gather(flattened_img, 1, perm_indices)
+    permuted_img = permuted_flattened_img.view_as(img)
+    return permuted_img
 
 
 @torch.no_grad()
@@ -124,9 +137,17 @@ def adversarial_attack_test(
         apply_forward_hooks(lif_nodes)
     )
     sample_data_store = {}
-    progbar = tqdm.tqdm(
+    dataloader = torch.utils.data.DataLoader(
         dataset,
-        total=len(dataset),
+        batch_size=1,
+        shuffle=(
+            True if DatasetFactory.is_native_dvs(args.dataset) else False
+        ),  # Event MNIST is in order
+        num_workers=4,
+    )
+    progbar = tqdm.tqdm(
+        dataloader,
+        total=len(dataloader),
         desc="Adversarial attack test",
         unit="sample",
     )
@@ -137,7 +158,8 @@ def adversarial_attack_test(
     for n, (img, target) in enumerate(progbar):
         if correct_preds >= args.n_samples_to_asses:
             break
-        img = img.unsqueeze(1).to(DEVICE)
+        img = img.transpose(0, 1).to(DEVICE)
+        target = target.numpy().item()
         pred_original = model(img).mean(dim=0)
         pred_correct = is_pred_correct(pred_original, target)
 
@@ -156,6 +178,7 @@ def adversarial_attack_test(
         # estimate time to achieve correct prediction
         functional.reset_net(model)
         pred_total = torch.zeros_like(pred_original, device=DEVICE)
+        num_frames_to_solution = args.repeats
         for f, frame in enumerate(img):
             frame = frame.unsqueeze(0)
             pred = model(frame).mean(dim=0)
@@ -223,7 +246,6 @@ def adversarial_attack_test(
             clear_hook_container(hooked_layers)
             if not pred_correct:
                 attack_end = True
-
         with open(json_results_path, "w") as f:
             json.dump(sample_data_store, f, indent=4)
 
@@ -260,7 +282,7 @@ if __name__ == "__main__":
         "--dataset",
         type=str,
         default="MNIST",
-        choices=["MNIST", "CIFAR10"],
+        choices=DatasetFactory.available_datasets(),
         help="Dataset to use for training and testing",
     )
     parser.add_argument(
@@ -283,6 +305,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     model = MODEL_MAP[args.model](
         n_channels=determine_input_size(args.dataset, args.model),
+        native_dvs_input=DatasetFactory.is_native_dvs(args.dataset),
     )
     functional.set_step_mode(model, step_mode="m")
     checkpoint_path = path_join(
@@ -294,7 +317,7 @@ if __name__ == "__main__":
         )
     model.load_state_dict(torch.load(checkpoint_path, map_location=DEVICE))
     model.to(DEVICE)
-    mnist_test_set = DatasetFactory.create_dataset(
+    test_set = DatasetFactory.create_dataset(
         args.dataset,
         root="./data",
         train=False,
@@ -305,4 +328,4 @@ if __name__ == "__main__":
     if not os.path.exists(args.results_dir):
         os.makedirs(args.results_dir)
 
-    adversarial_attack_test(args, model, mnist_test_set)
+    adversarial_attack_test(args, model, test_set)

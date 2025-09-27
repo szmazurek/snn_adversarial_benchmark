@@ -7,31 +7,12 @@ import json
 from tqdm import tqdm
 
 
-if int(os.environ.get("CUPY_ENABLE_UMP", 0)) == 1:
-    import cupy._core.numpy_allocator as ac
-    import numpy_allocator
-    import ctypes
-
-    cp.cuda.set_allocator(
-        cp.cuda.MemoryPool(cp.cuda.memory.malloc_system).malloc
-    )
-
-    lib = ctypes.CDLL(ac.__file__)
-
-    class my_allocator(metaclass=numpy_allocator.type):
-        _calloc_ = ctypes.addressof(lib._calloc)
-        _malloc_ = ctypes.addressof(lib._malloc)
-        _realloc_ = ctypes.addressof(lib._realloc)
-        _free_ = ctypes.addressof(lib._free)
-
-    my_allocator.__enter__()  # change the allocator globally
-
 FIRST_DIM_TARGET_SIZE = 10
 
 
 def compute_correlation_from_activity_matrix(activity_matrix):
-    if activity_matrix.shape[0] != FIRST_DIM_TARGET_SIZE:
-        activity_matrix = activity_matrix[0]
+    # if activity_matrix.shape[0] != FIRST_DIM_TARGET_SIZE:
+    #     activity_matrix = activity_matrix[0]
 
     activity_matrix = activity_matrix.reshape(activity_matrix.shape[0], -1)
     corr_matrix = cp.corrcoef(activity_matrix.T)
@@ -60,7 +41,7 @@ def compute_average_layer_correlation_scores(
     layer_correct_hard_ranks = {}
     layer_incorrect_hard_ranks = {}
     total_samples_processed = 0
-
+    total_samples_error = 0
     for label_dir in os.listdir(root_data_path):
         # label level
         print(label_dir)
@@ -118,11 +99,16 @@ def compute_average_layer_correlation_scores(
                         layer_name = f"{layer_name_prefix}_{layer_num_str}"
                     else:
                         continue
-
-                    corr_matrix = compute_correlation_from_activity_matrix(
-                        cp.asarray(np.load(layer_activity_file))
+                    correct_layer_activity_matrix = cp.asarray(
+                        np.load(layer_activity_file)
                     )
-                    matrix_rank = compute_matrix_rank(corr_matrix)
+                    corr_matrix = compute_correlation_from_activity_matrix(
+                        correct_layer_activity_matrix
+                    )
+
+                    matrix_rank = compute_matrix_rank(
+                        correct_layer_activity_matrix
+                    )
                     if layer_name not in layer_correct_hard_ranks:
                         layer_correct_hard_ranks[layer_name] = []
                     layer_correct_hard_ranks[layer_name].append(matrix_rank)
@@ -153,11 +139,15 @@ def compute_average_layer_correlation_scores(
                         layer_name = f"{layer_name_prefix}_{layer_num_str}"
                     else:
                         continue
-
-                    corr_matrix = compute_correlation_from_activity_matrix(
-                        cp.asarray(np.load(layer_activity_file))
+                    incorrect_layer_activity_matrix = cp.asarray(
+                        np.load(layer_activity_file)
                     )
-                    matrix_rank = compute_matrix_rank(corr_matrix)
+                    corr_matrix = compute_correlation_from_activity_matrix(
+                        incorrect_layer_activity_matrix
+                    )
+                    matrix_rank = compute_matrix_rank(
+                        incorrect_layer_activity_matrix
+                    )
                     if layer_name not in layer_incorrect_hard_ranks:
                         layer_incorrect_hard_ranks[layer_name] = []
                     layer_incorrect_hard_ranks[layer_name].append(matrix_rank)
@@ -173,6 +163,8 @@ def compute_average_layer_correlation_scores(
                 print(
                     f"Error processing sample {sample_dir_path}: {e}, skipping and attempting next sample."
                 )
+                total_samples_error += 1
+                continue
     for layer_name in layer_correlations_correct:
         if layer_correct_sample_counts[layer_name] > 0:
             layer_correlations_correct[
@@ -193,7 +185,9 @@ def compute_average_layer_correlation_scores(
         layer_incorrect_hard_ranks[layer_name] = cp.mean(
             cp.asarray(layer_incorrect_hard_ranks[layer_name])
         )
-
+    print(
+        f"Total samples processed: {total_samples_processed}, Total samples with errors: {total_samples_error} for experiment at {root_data_path}"
+    )
     if save_dir:
         os.makedirs(save_dir, exist_ok=True)
         for layer_name, corr_matrix in layer_correlations_correct.items():
