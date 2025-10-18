@@ -119,7 +119,9 @@ def generate_noisy_frame_permute(img):
     """
     flattened_img = img.view(img.size(0), -1)
     channel_dim, all_pixels = flattened_img.size()
-    perm_indices = torch.rand(channel_dim, all_pixels).argsort(dim=1)
+    perm_indices = torch.rand(channel_dim, all_pixels, device=DEVICE).argsort(
+        dim=1
+    )
     permuted_flattened_img = torch.gather(flattened_img, 1, perm_indices)
     permuted_img = permuted_flattened_img.view_as(img)
     return permuted_img
@@ -156,6 +158,7 @@ def adversarial_attack_test(
     )
     correct_preds = 0
     for n, (img, target) in enumerate(progbar):
+        clear_hook_container(hooked_layers)
         if correct_preds >= args.n_samples_to_asses:
             break
         img = img.transpose(0, 1).to(DEVICE)
@@ -166,6 +169,8 @@ def adversarial_attack_test(
         if not pred_correct:
             continue
         correct_preds += 1
+        progbar.set_postfix({"correct_samples_found": correct_preds})
+
         process_data_recorded_by_hooks(
             hooked_layers=hooked_layers,
             save_path=args.results_dir,
@@ -215,7 +220,9 @@ def adversarial_attack_test(
                 attack_end = True
                 break
             replace_idx = random_sample(idxs_to_choose, 1)[0]
-            adversarial_img[replace_idx] = generate_random_frame(img)
+            adversarial_img[replace_idx] = generate_noisy_frame_permute(
+                img[replace_idx]
+            )
             replaced_frames_idxes.append(replace_idx)
             replaced_frames_count += 1
             # predict

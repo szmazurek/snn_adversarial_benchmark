@@ -101,8 +101,8 @@ def SimpleConvSNN(
     )
     if not native_dvs_input:
         encoder = encoding.PoissonEncoder()
-        flatten = layer.Flatten()
-        net = nn.Sequential(encoder, flatten, net)
+        net = nn.Sequential(encoder, net)
+
     return net
 
 
@@ -135,8 +135,7 @@ def SimpleConvSNNRecurrent(
     )
     if not native_dvs_input:
         encoder = encoding.PoissonEncoder()
-        flatten = layer.Flatten()
-        net = nn.Sequential(encoder, flatten, net)
+        net = nn.Sequential(encoder, net)
     return net
 
 

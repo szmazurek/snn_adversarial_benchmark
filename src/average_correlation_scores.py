@@ -20,6 +20,13 @@ def compute_correlation_from_activity_matrix(activity_matrix):
     return corr_matrix
 
 
+def compute_covariance_from_activity_matrix(activity_matrix):
+    activity_matrix = activity_matrix.reshape(activity_matrix.shape[0], -1)
+    cov_matrix = cp.cov(activity_matrix.T)
+    cov_matrix[cp.isnan(cov_matrix)] = 0
+    return cov_matrix
+
+
 def compute_matrix_rank(matrix):
     """
     Compute the rank of a matrix using SVD.
@@ -40,6 +47,7 @@ def compute_average_layer_correlation_scores(
 
     layer_correct_hard_ranks = {}
     layer_incorrect_hard_ranks = {}
+
     total_samples_processed = 0
     total_samples_error = 0
     for label_dir in os.listdir(root_data_path):
@@ -148,6 +156,7 @@ def compute_average_layer_correlation_scores(
                     matrix_rank = compute_matrix_rank(
                         incorrect_layer_activity_matrix
                     )
+
                     if layer_name not in layer_incorrect_hard_ranks:
                         layer_incorrect_hard_ranks[layer_name] = []
                     layer_incorrect_hard_ranks[layer_name].append(matrix_rank)
