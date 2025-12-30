@@ -1,12 +1,11 @@
+from typing import Dict, List, Optional
+
 import h5py
 import torch
 
-from typing import Dict, List, Optional
-
 
 class HDF5Manager:
-    """
-    Manages saving data to an HDF5 file, mirroring a directory structure.
+    """Manages saving data to an HDF5 file, mirroring a directory structure.
 
     This class provides an interface to incrementally save data, such as simulation
     results, into an HDF5 file, organizing it in a hierarchical structure based on
@@ -26,26 +25,34 @@ class HDF5Manager:
     """
 
     def __init__(self, filepath: str, mode: str = "a"):
-        """
-        Initializes the HDF5Manager.
+        """Initializes the HDF5Manager.
 
         Args:
             filepath (str): Path to the HDF5 file.
             mode (str, optional): File access mode ('w' for write, 'a' for append).
                 Defaults to 'a'.  Use 'w' to create a new file or overwrite an existing one.
                 Use 'a' to append to an existing file.
+
         """
         self.filepath = filepath
         self.mode = mode
         self._file = None  # HDF5 file object, opened on demand
 
     def _open_file(self):
-        """Opens the HDF5 file.  Internal method."""
+        """Opens the HDF5 file.
+
+        Internal method.
+
+        """
         if self._file is None:
             self._file = h5py.File(self.filepath, self.mode)
 
     def _close_file(self):
-        """Closes the HDF5 file.  It's the user's responsibility to call this."""
+        """Closes the HDF5 file.
+
+        It's the user's responsibility to call this.
+
+        """
         if self._file is not None:
             self._file.close()
             self._file = None
@@ -67,8 +74,7 @@ class HDF5Manager:
         noise_level: Optional[float],
         hooked_layers: Dict[str, Dict[str, List[torch.Tensor]]],
     ):
-        """
-        Saves data for a single sample into the HDF5 file.
+        """Saves data for a single sample into the HDF5 file.
 
         Args:
             label (int): The label of the sample.
@@ -86,6 +92,7 @@ class HDF5Manager:
                     },
                     ...
                 }
+
         """
         self._open_file()  # Ensure file is open
 
@@ -130,7 +137,11 @@ class HDF5Manager:
         self._file.flush()  # Ensure data is written to the file
 
     def close(self):
-        """Closes the HDF5 file.  Important to call this when finished."""
+        """Closes the HDF5 file.
+
+        Important to call this when finished.
+
+        """
         self._close_file()
 
     # The following methods are less relevant to the user's immediate request,
@@ -138,8 +149,7 @@ class HDF5Manager:
     # NOT used in the provided solution.
 
     def load_data(self, group_path: str, layer_name: str):
-        """
-        Loads data for a specific layer from a group.
+        """Loads data for a specific layer from a group.
 
         Args:
             group_path (str): The path to the group containing the data.
@@ -149,6 +159,7 @@ class HDF5Manager:
         Returns:
             Tuple[numpy.ndarray, numpy.ndarray]: The voltage and spike data
                 for the specified layer, or (None, None) if the data is not found.
+
         """
         self._open_file()  # Ensure file is open
 
@@ -168,12 +179,12 @@ class HDF5Manager:
             return None, None
 
     def get_all_group_names(self):
-        """
-        Retrieves a list of all group names in the HDF5 file.  Useful for
+        """Retrieves a list of all group names in the HDF5 file.  Useful for
         inspecting the file structure.
 
         Returns:
             list: A list of strings, where each string is the full path to a group.
+
         """
         self._open_file()  # ensure file is open
 
@@ -186,11 +197,12 @@ class HDF5Manager:
         return groups
 
     def delete_group(self, group_path: str):
-        """
-        Deletes a group and all its contents from the HDF5 file.  Use with caution!
+        """Deletes a group and all its contents from the HDF5 file.  Use with
+        caution!
 
         Args:
             group_path (str): The path to the group to delete.
+
         """
         self._open_file()  # ensure file is open
         if group_path in self._file:

@@ -1,0 +1,39 @@
+[tool.black]
+include = '\.pyi?$'
+line-length = 79
+target-version = ['py39', 'py310', 'py311']
+
+[tool.mypy]
+disallow_any_generics = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+no_implicit_optional = true
+strict = true
+warn_redundant_casts = true
+warn_return_any = true
+warn_unused_configs = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+addopts = "-ra -q --cov=src --cov-report=term-missing"
+minversion = "6.0"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+omit = ["tests/*", "*/__init__.py"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+
+[tool.isort]
+include_trailing_comma = true
+line_length = 79
+multi_line_output = 3
+profile = "black"
+
+[tool.docformatter]
+blank = true
+recursive = true
+wrap-descriptions = 79
+wrap-summaries = 79

@@ -1,18 +1,17 @@
-import os
-import torch
-from tqdm import tqdm
-from torch import nn
-from torchmetrics import Accuracy
-from spikingjelly.activation_based import functional
-from torch.utils.data import random_split, DataLoader
-from early_stopping_pytorch import EarlyStopping
 import argparse
+import os
 
+import torch
+from early_stopping_pytorch import EarlyStopping
+from spikingjelly.activation_based import functional
+from torch import nn
+from torch.utils.data import DataLoader, random_split
+from torchmetrics import Accuracy
+from tqdm import tqdm
 
+from datasets import DatasetFactory
 from models import MODEL_MAP
 from utils import determine_input_size
-from datasets import DatasetFactory
-
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

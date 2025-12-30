@@ -1,9 +1,10 @@
-from torch import nn
-from spikingjelly.activation_based import surrogate, neuron, layer, encoding
+from typing import Any, Callable, Dict
+
+from spikingjelly.activation_based import encoding, layer, neuron, surrogate
+from spikingjelly.activation_based.layer import LinearRecurrentContainer
 from spikingjelly.activation_based.model.sew_resnet import sew_resnet18
 from spikingjelly.activation_based.model.spiking_vgg import spiking_vgg11_bn
-from spikingjelly.activation_based.layer import LinearRecurrentContainer
-from typing import Dict, Callable, Any
+from torch import nn
 
 
 def SewResnet18(

@@ -1,19 +1,19 @@
-import os
 import json
+import os
+from itertools import combinations
+from os.path import join as path_join
+from random import sample as random_sample
+from typing import Dict, List
+
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
-from os.path import join as path_join
-from itertools import combinations
 import tqdm
-from models import SewResnet18
-from datasets import MNISTRepeated
-from random import sample as random_sample
 from spikingjelly.activation_based import functional, neuron
 from torch.nn.functional import softmax
 
-from typing import List, Dict
-
+from datasets import MNISTRepeated
+from models import SewResnet18
 
 REPEATS = 10
 N_ITERS_NOISE_INJECTION = 100

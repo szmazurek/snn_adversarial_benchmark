@@ -1,34 +1,39 @@
-import os
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-from os.path import join as joinpath
-from scipy.stats import kurtosis, skew
-import json
 import argparse
+import json
+import os
+from os.path import join as joinpath
+
+import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+import numpy as np
+import seaborn as sns
 from scipy.ndimage import zoom
+from scipy.stats import kurtosis, skew
+from skimage.measure import block_reduce
 
 
 def downsample_matrix(matrix, max_size=500):
-    """
-    Downsample a correlation matrix to a maximum size while preserving structure.
+    """Downsample using local averaging (pooling).
 
-    Args:
-        matrix (np.ndarray): Input correlation matrix
-        max_size (int): Maximum dimension for the downsampled matrix
+    This preserves the 'energy' of the correlation better than spline
+    interpolation.
 
-    Returns:
-        np.ndarray: Downsampled matrix
     """
-    if matrix.shape[0] <= max_size and matrix.shape[1] <= max_size:
+    if matrix.shape[0] <= max_size:
         return matrix
 
-    # Calculate zoom factor
-    zoom_factor = min(max_size / matrix.shape[0], max_size / matrix.shape[1])
+    # Calculate the block size (how many pixels to merge into one)
+    # Ceil division ensures we get under the max_size
+    factor = int(np.ceil(matrix.shape[0] / max_size))
 
-    # Downsample using scipy.ndimage.zoom with cubic interpolation
-    downsampled = zoom(matrix, zoom_factor, order=3, mode="nearest")
+    # Use block_reduce to take the mean of local blocks
+    # cval=0 pads edges if the matrix isn't perfectly divisible
+    downsampled = block_reduce(
+        matrix, block_size=(factor, factor), func=np.mean
+    )
+
+    # Optional: Re-normalize the diagonal if strictly necessary for visual reference
+    # though mean-pooling naturally lowers the diagonal value anyway.
 
     return downsampled
 
@@ -36,14 +41,15 @@ def downsample_matrix(matrix, max_size=500):
 def plot_correlation_matrices(
     corr_results_dir, save_dir, num_last_layers_to_plot, max_matrix_size=500
 ):
-    """
-    Plots correlation matrices and their distributions, saving results into specified directories.
+    """Plots correlation matrices and their distributions, saving results into
+    specified directories.
 
     Args:
         corr_results_dir (str): Path to the input directory containing NPY correlation matrices.
         save_dir (str): Path to the directory where plots and statistics will be saved.
         num_last_layers_to_plot (int): The number of last layers to plot.
         max_matrix_size (int): Maximum size for matrix visualization (default: 500)
+
     """
 
     os.makedirs(save_dir, exist_ok=True)

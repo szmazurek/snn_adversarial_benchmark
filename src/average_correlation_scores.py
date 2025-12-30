@@ -1,11 +1,11 @@
-import os
-import numpy as np
-import cupy as cp
-from os.path import join as joinpath
 import argparse
 import json
-from tqdm import tqdm
+import os
+from os.path import join as joinpath
 
+import cupy as cp
+import numpy as np
+from tqdm import tqdm
 
 FIRST_DIM_TARGET_SIZE = 10
 
@@ -28,9 +28,7 @@ def compute_covariance_from_activity_matrix(activity_matrix):
 
 
 def compute_matrix_rank(matrix):
-    """
-    Compute the rank of a matrix using SVD.
-    """
+    """Compute the rank of a matrix using SVD."""
     s = cp.linalg.svd(matrix, compute_uv=False)
     rank = cp.sum(s > 1e-10)
     return rank

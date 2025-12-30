@@ -1,9 +1,12 @@
 import os
 import shutil
+
 import torch
 from torchvision.transforms import Compose, ToTensor, Normalize
 from torchvision.datasets import MNIST, CIFAR10, UCF101
 from spikingjelly.datasets.n_mnist import NMNIST
+from torchvision.datasets import CIFAR10, MNIST
+from torchvision.transforms import Compose, Normalize, ToTensor
 
 SINGLE_CHANNEL_DATASETS = ["MNIST", "FashionMNIST", "KMNIST"]
 

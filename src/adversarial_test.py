@@ -17,7 +17,6 @@ from models import MODEL_MAP
 from utils import determine_input_size
 from argparse import ArgumentParser
 
-
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -107,10 +106,8 @@ def generate_random_frame(img):
 
 
 def generate_noisy_frame_permute(img):
-    """
-    Given an image tensor of shape (C, H, W), this function randomly permutes the pixel values
-    in each channel independently.
-    """
+    """Given an image tensor of shape (C, H, W), this function randomly
+    permutes the pixel values in each channel independently."""
     flattened_img = img.view(img.size(0), -1)
     channel_dim, all_pixels = flattened_img.size()
     perm_indices = torch.rand(channel_dim, all_pixels, device=DEVICE).argsort(dim=1)

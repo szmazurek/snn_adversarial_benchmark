@@ -1,18 +1,16 @@
 import argparse
 import glob
 import os
-from sympy import arg
-from tqdm import tqdm
+from argparse import ArgumentParser
+from copy import deepcopy
+from typing import Any, List
+
 import cupy as cp
 import numpy as np
 import pandas as pd
 from scipy.stats import kurtosis, skew
-from copy import deepcopy
-
-from argparse import ArgumentParser
-
-from typing import List, Any
-
+from sympy import arg
+from tqdm import tqdm
 
 FIXED_HIGH_THRESHOLD_4TH_PERCENTILE = 0.75
 FIXED_HIGH_THRESHOLD_LAST_DECILE = 0.9
@@ -27,17 +25,15 @@ class ScriptArgs(argparse.Namespace):
 
 
 class MatrixStats:
-    """
-    A data class to hold various statistical measurements of a matrix.
+    """A data class to hold various statistical measurements of a matrix.
 
     Casts specific fields (mean, median, kurt, skewness, p99_value) to float,
     and count fields (all others) to int in the constructor.
+
     """
 
     def __init__(self, **kwargs: Any):
-        """
-        Initializes the stats fields and performs mandatory type casting.
-        """
+        """Initializes the stats fields and performs mandatory type casting."""
         self.mean: float = float(kwargs.get("mean", 0.0))
         self.std_dev: float = float(kwargs.get("std_dev", 0.0))
         self.median: float = float(kwargs.get("median", 0.0))
@@ -102,9 +98,8 @@ class MatrixStats:
 def prepare_paths_list_npy_files(
     root_dir: str, search_pattern: str = "*spike_layer_2.npy"
 ):
-    """
-    Given root dir, recurse into it and find paths to all files matching the pattern
-    """
+    """Given root dir, recurse into it and find paths to all files matching the
+    pattern."""
     search_path_pattern = os.path.join(root_dir, "**", search_pattern)
     found_npy_files_paths: List[str] = glob.glob(
         search_path_pattern, recursive=True
@@ -123,9 +118,7 @@ def compute_correlation_from_activity_matrix(activity_matrix: np.ndarray):
 
 
 def compute_matrix_statistics(input_matrix: np.ndarray):
-    """
-    Calculate stats from input matrix.
-    """
+    """Calculate stats from input matrix."""
     flattened_matrix = input_matrix.flatten()
     mean = np.mean(flattened_matrix) * MEAN_MEDIAN_SCALING_FACTOR
     median = np.median(flattened_matrix) * MEAN_MEDIAN_SCALING_FACTOR
