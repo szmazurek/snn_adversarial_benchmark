@@ -1,11 +1,11 @@
 import os
-import json
 import torch
 import torch.nn as nn
 import numpy as np
 from os.path import join as path_join
 
 import tqdm
+from copy import deepcopy
 from datasets import DatasetFactory
 from random import sample as random_sample, shuffle
 from spikingjelly.activation_based import functional, neuron
@@ -73,9 +73,7 @@ def process_data_recorded_by_hooks(
     )
     last_dir_name: str = "correct" if is_correct else "incorrect"
     last_dir_name += (
-        "_original"
-        if noise_level is None
-        else f"_noise_{round(100*noise_level)}"
+        "_original" if noise_level is None else f"_noise_{round(100*noise_level)}"
     )
     sample_save_path = path_join(sample_save_path, last_dir_name)
     if not os.path.exists(sample_save_path):
@@ -85,13 +83,11 @@ def process_data_recorded_by_hooks(
         s_seq = torch.cat(data["s_seq"]).cpu().numpy().squeeze()
         voltage_path = path_join(
             sample_save_path,
-            f"test_{sample_idx}_label_{label}_voltage"
-            f"_{name.replace('-', 'm')}.npy",
+            f"test_{sample_idx}_label_{label}_voltage" f"_{name.replace('-', 'm')}.npy",
         )
         spike_path = path_join(
             sample_save_path,
-            f"test_{sample_idx}_label_{label}_spike_"
-            f"{name.replace('-', 'm')}.npy",
+            f"test_{sample_idx}_label_{label}_spike_" f"{name.replace('-', 'm')}.npy",
         )
         np.save(voltage_path, v_seq)
         np.save(spike_path, s_seq)
@@ -106,9 +102,7 @@ def generate_random_frame(img):
 
     random_img = torch.rand_like(img[0], dtype=torch.float32, device=DEVICE)
     # TODO should I standardize with the dataset mean and std?
-    random_img = (random_img - random_img.min()) / (
-        random_img.max() - random_img.min()
-    )
+    random_img = (random_img - random_img.min()) / (random_img.max() - random_img.min())
     return random_img
 
 
@@ -119,9 +113,7 @@ def generate_noisy_frame_permute(img):
     """
     flattened_img = img.view(img.size(0), -1)
     channel_dim, all_pixels = flattened_img.size()
-    perm_indices = torch.rand(channel_dim, all_pixels, device=DEVICE).argsort(
-        dim=1
-    )
+    perm_indices = torch.rand(channel_dim, all_pixels, device=DEVICE).argsort(dim=1)
     permuted_flattened_img = torch.gather(flattened_img, 1, perm_indices)
     permuted_img = permuted_flattened_img.view_as(img)
     return permuted_img
@@ -135,10 +127,11 @@ def adversarial_attack_test(
 ):
     model.eval()
     lif_nodes: List[nn.Module] = get_lif_nodes(model)
-    hooked_layers: Dict[str, Dict[str, List[torch.Tensor]]] = (
-        apply_forward_hooks(lif_nodes)
+    # we take only last LIF node for hooking to reduce memory usage
+    lif_nodes = [lif_nodes[-1]]
+    hooked_layers: Dict[str, Dict[str, List[torch.Tensor]]] = apply_forward_hooks(
+        lif_nodes
     )
-    sample_data_store = {}
     dataloader = torch.utils.data.DataLoader(
         dataset,
         batch_size=1,
@@ -153,13 +146,12 @@ def adversarial_attack_test(
         desc="Adversarial attack test",
         unit="sample",
     )
-    json_results_path = path_join(
-        args.results_dir, "adversarial_test_results.json"
-    )
-    correct_preds = 0
+
+    successful_attacks = 0
     for n, (img, target) in enumerate(progbar):
+        save_buffer = []
         clear_hook_container(hooked_layers)
-        if correct_preds >= args.n_samples_to_asses:
+        if successful_attacks >= args.n_samples_to_asses:
             break
         img = img.transpose(0, 1).to(DEVICE)
         target = target.numpy().item()
@@ -168,39 +160,19 @@ def adversarial_attack_test(
 
         if not pred_correct:
             continue
-        correct_preds += 1
-        progbar.set_postfix({"correct_samples_found": correct_preds})
-
-        process_data_recorded_by_hooks(
-            hooked_layers=hooked_layers,
-            save_path=args.results_dir,
-            sample_idx=n,
-            label=target,
-            is_correct=pred_correct,
-            noise_level=None,
+        save_buffer.append(
+            {
+                "hooked_layers": deepcopy(hooked_layers),
+                "is_correct": pred_correct,
+                "noise_level": None,
+                "sample_idx": n,
+                "label": target,
+            }
         )
+
         # save metadata of original sample and pred logits (distirbution)
         # estimate time to achieve correct prediction
-        functional.reset_net(model)
-        pred_total = torch.zeros_like(pred_original, device=DEVICE)
-        num_frames_to_solution = args.repeats
-        for f, frame in enumerate(img):
-            frame = frame.unsqueeze(0)
-            pred = model(frame).mean(dim=0)
-            pred_total += pred
-            if is_pred_correct(pred_total, target):
 
-                num_frames_to_solution: int = f + 1
-                break
-        sample_data_store[n] = {
-            "target": target,
-            "clean_sample_pred_distribution": softmax(pred_original, dim=1)
-            .cpu()
-            .squeeze()
-            .tolist(),
-            "num_frames_to_solve": num_frames_to_solution,
-            "adversarial_samples_results": [],
-        }
         attack_end = False
         replaced_frames_idxes = []
         replaced_frames_count = 0
@@ -212,9 +184,7 @@ def adversarial_attack_test(
             # randomly select a frame to replace
             # (but not the ones already replaced)
             idxs_to_choose = [
-                i
-                for i in range(args.repeats)
-                if i not in replaced_frames_idxes
+                i for i in range(args.repeats) if i not in replaced_frames_idxes
             ]
             if not idxs_to_choose:
                 attack_end = True
@@ -228,33 +198,36 @@ def adversarial_attack_test(
             # predict
             pred = model(adversarial_img).mean(dim=0)
             pred_correct = is_pred_correct(pred, target)
-            # save metadata of adversarial sample and pred
-            # logits (distirbution)
-            sample_data_store[n]["adversarial_samples_results"].append(
+
+            save_buffer.append(
                 {
-                    "pred_distribution": softmax(pred, dim=1)
-                    .cpu()
-                    .squeeze()
-                    .tolist(),
-                    "pred_correct": pred_correct,
-                    "replaced_frames_count": replaced_frames_count,
-                    "replaced_frames_idxes": replaced_frames_idxes,
-                    "current_attack_replace_idx": replace_idx,
+                    "hooked_layers": deepcopy(hooked_layers),
+                    "is_correct": pred_correct,
+                    "noise_level": replaced_frames_count / args.repeats,
+                    "sample_idx": n,
+                    "label": target,
                 }
             )
-            process_data_recorded_by_hooks(
-                hooked_layers=hooked_layers,
-                save_path=args.results_dir,
-                sample_idx=n,
-                label=target,
-                is_correct=pred_correct,
-                noise_level=replaced_frames_count / args.repeats,
-            )
-            clear_hook_container(hooked_layers)
+
             if not pred_correct:
+                successful_attacks += 1
                 attack_end = True
-        with open(json_results_path, "w") as f:
-            json.dump(sample_data_store, f, indent=4)
+                progbar.set_postfix(
+                    {
+                        "Successful Attacks": successful_attacks,
+                        "Sample Index": n,
+                    }
+                )
+                for record in save_buffer:
+                    process_data_recorded_by_hooks(
+                        hooked_layers=record["hooked_layers"],
+                        save_path=args.results_dir,
+                        sample_idx=record["sample_idx"],
+                        label=record["label"],
+                        is_correct=record["is_correct"],
+                        noise_level=record["noise_level"],
+                    )
+            clear_hook_container(hooked_layers)
 
 
 if __name__ == "__main__":
@@ -315,13 +288,9 @@ if __name__ == "__main__":
         native_dvs_input=DatasetFactory.is_native_dvs(args.dataset),
     )
     functional.set_step_mode(model, step_mode="m")
-    checkpoint_path = path_join(
-        args.checkpoint_dir, f"{args.experiment_name}_best.pth"
-    )
+    checkpoint_path = path_join(args.checkpoint_dir, f"{args.experiment_name}_best.pth")
     if not os.path.exists(checkpoint_path):
-        raise FileNotFoundError(
-            f"Checkpoint file {checkpoint_path} does not exist."
-        )
+        raise FileNotFoundError(f"Checkpoint file {checkpoint_path} does not exist.")
     model.load_state_dict(torch.load(checkpoint_path, map_location=DEVICE))
     model.to(DEVICE)
     test_set = DatasetFactory.create_dataset(

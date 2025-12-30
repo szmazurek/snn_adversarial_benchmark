@@ -17,9 +17,7 @@ from datasets import DatasetFactory
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def train_epoch(
-    model, dataloader, criterion, optimizer, accuracy_metric, epoch
-):
+def train_epoch(model, dataloader, criterion, optimizer, accuracy_metric, epoch):
     model.train()
     epoch_loss = 0
     epoch_preds = []
@@ -54,9 +52,7 @@ def validate_epoch(model, dataloader, criterion, accuracy_metric, epoch):
     epoch_preds = []
     epoch_targets = []
     with torch.no_grad():
-        dataloader_progbar = tqdm(
-            dataloader, desc=f"Validation Epoch {epoch+1}"
-        )
+        dataloader_progbar = tqdm(dataloader, desc=f"Validation Epoch {epoch+1}")
         for img, target in dataloader_progbar:
             out = model(img.transpose(0, 1).to(DEVICE)).mean(0)
             loss = criterion(out, target.to(DEVICE))
@@ -94,12 +90,7 @@ def test_model(model, dataloader, accuracy_metric):
 
 
 def main(args):
-    output_size = (
-        10 if args.dataset in ["MNIST", "CIFAR10", "EventMNIST"] else None
-    )
-    assert (
-        output_size is not None
-    ), "Output size must be specified for the dataset."
+    output_size = DatasetFactory.num_classes(args.dataset)
     n_channels = determine_input_size(args.dataset, args.model)
     checkpoint_path = os.path.join(
         args.checkpoint_dir, f"{args.experiment_name}_best.pth"
@@ -154,7 +145,7 @@ def main(args):
     )
 
     criterion = nn.CrossEntropyLoss().to(DEVICE)
-    accuracy_metric = Accuracy(task="multiclass", num_classes=10).to(DEVICE)
+    accuracy_metric = Accuracy(task="multiclass", num_classes=output_size).to(DEVICE)
 
     optimizer = torch.optim.AdamW(
         model.parameters(),
@@ -204,9 +195,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--learning_rate", type=float, default=1e-2, help="Learning rate"
     )
-    parser.add_argument(
-        "--weight_decay", type=float, default=0, help="Weight decay"
-    )
+    parser.add_argument("--weight_decay", type=float, default=0, help="Weight decay")
     parser.add_argument(
         "--val_split",
         type=float,

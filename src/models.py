@@ -11,6 +11,7 @@ def SewResnet18(
     output_size: int = 10,
     neuron_model: neuron.BaseNode = neuron.LIFNode,
     surrogate_function: surrogate.SurrogateFunctionBase = surrogate.ATan,
+    native_dvs_input: bool = False,
 ) -> nn.Module:
     net = sew_resnet18(
         pretrained=False,
@@ -27,6 +28,11 @@ def SewResnet18(
         bias=False,
     )
     net.fc = layer.Linear(512, output_size)
+
+    if not native_dvs_input:
+        encoder = encoding.PoissonEncoder()
+        net = nn.Sequential(encoder, net)
+
     return net
 
 
@@ -36,6 +42,7 @@ def SpikingVGG11BN(
     neuron_model: neuron.BaseNode = neuron.LIFNode,
     surrogate_function: surrogate.SurrogateFunctionBase = surrogate.ATan,
     remove_last_pool: int = 2,
+    native_dvs_input: bool = False,
 ) -> nn.Module:
     net = spiking_vgg11_bn(
         pretrained=False,
@@ -51,12 +58,11 @@ def SpikingVGG11BN(
         padding=(1, 1),
         bias=False,
     )
-    net.classifier[6] = layer.Linear(4096, output_size)
+    net.classifier[3] = layer.Linear(4096, 512)
+    net.classifier[6] = layer.Linear(512, output_size)
 
     pool_indices: list[int] = [
-        i
-        for i, module in enumerate(net.features)
-        if isinstance(module, nn.MaxPool2d)
+        i for i, module in enumerate(net.features) if isinstance(module, nn.MaxPool2d)
     ]
 
     if remove_last_pool > 0 and len(pool_indices) >= remove_last_pool:
@@ -67,11 +73,13 @@ def SpikingVGG11BN(
             else -1
         )
         for i, module in enumerate(net.features):
-            if i <= last_pool_index_to_keep or not isinstance(
-                module, nn.MaxPool2d
-            ):
+            if i <= last_pool_index_to_keep or not isinstance(module, nn.MaxPool2d):
                 modules_to_keep.append(module)
         net.features = nn.Sequential(*modules_to_keep)
+
+    if not native_dvs_input:
+        encoder = encoding.PoissonEncoder()
+        net = nn.Sequential(encoder, net)
 
     return net
 
@@ -266,3 +274,8 @@ MODEL_MAP: Dict[str, Callable[[Any], nn.Module]] = {
     "simple_conv_snn_recurrent": SimpleConvSNNRecurrent,
     "simple_mlp_snn_recurrent": SimpleMLPSNNRecurrent,
 }
+
+
+if __name__ == "__main__":
+    model = SpikingVGG11BN()
+    print(model)
