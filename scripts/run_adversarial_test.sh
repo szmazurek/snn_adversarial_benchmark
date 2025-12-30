@@ -26,8 +26,8 @@ srun --ntasks=1 --cpus-per-task=16 --gpus-per-task=1 --mem-per-cpu=4GB \
   --output="${OUTPUT_BASE_DIR}/out/${EXPERIMENT_NAME}_adv_%j.out" \
   --error="${OUTPUT_BASE_DIR}/err/${EXPERIMENT_NAME}_adv_%j.err" \
   python src/adversarial_test.py \
-    --experiment_name "$EXPERIMENT_NAME" \
-    --dataset "$DATASET" \
-    --results_dir "$RESULTS_DIR" \
-    --data_dir "$DATA_DIR" \
-    --model "$MODEL" &
+    experiment_name="$EXPERIMENT_NAME" \
+    dataset="$DATASET" \
+    model="$MODEL" \
+    results_dir="$RESULTS_DIR" \
+    data_dir="$DATA_DIR" &

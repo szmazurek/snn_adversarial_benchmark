@@ -1,0 +1,20 @@
+defaults:
+  - model: sew_resnet
+  - dataset: MNIST
+  - _self_
+
+# Training parameters
+epochs: 10
+batch_size: 8
+learning_rate: 1e-2
+weight_decay: 0
+val_split: 0.1
+num_workers: 4
+patience: 5
+experiment_name: "default_experiment"
+checkpoint_dir: "checkpoints"
+data_dir: "./data"
+output_dir: "${hydra:runtime.output_dir}" # Hydra will set this
+
+# Checkpointing
+# Hydra changes cwd, so we might want to be explicit or use hydra.utils.to_absolute_path in code

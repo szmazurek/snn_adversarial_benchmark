@@ -15,7 +15,11 @@ from typing import List, Dict
 from datasets import DatasetFactory
 from models import MODEL_MAP
 from utils import determine_input_size
-from argparse import ArgumentParser
+from datasets import DatasetFactory
+from models import MODEL_MAP
+from utils import determine_input_size
+import hydra
+from omegaconf import DictConfig, OmegaConf
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -133,7 +137,7 @@ def adversarial_attack_test(
         dataset,
         batch_size=1,
         shuffle=(
-            True if DatasetFactory.is_native_dvs(args.dataset) else False
+            True if DatasetFactory.is_native_dvs(args.dataset.name) else False
         ),  # Event MNIST is in order
         num_workers=4,
     )
@@ -181,7 +185,7 @@ def adversarial_attack_test(
             # randomly select a frame to replace
             # (but not the ones already replaced)
             idxs_to_choose = [
-                i for i in range(args.repeats) if i not in replaced_frames_idxes
+                i for i in range(args.dataset.repeats) if i not in replaced_frames_idxes
             ]
             if not idxs_to_choose:
                 attack_end = True
@@ -200,7 +204,7 @@ def adversarial_attack_test(
                 {
                     "hooked_layers": deepcopy(hooked_layers),
                     "is_correct": pred_correct,
-                    "noise_level": replaced_frames_count / args.repeats,
+                    "noise_level": replaced_frames_count / args.dataset.repeats,
                     "sample_idx": n,
                     "label": target,
                 }
@@ -227,84 +231,44 @@ def adversarial_attack_test(
             clear_hook_container(hooked_layers)
 
 
-if __name__ == "__main__":
-    parser = ArgumentParser(description="Adversarial Attack Test Script")
+@hydra.main(version_base=None, config_path="conf", config_name="config")
+def run_app(cfg: DictConfig) -> None:
+    # Resolve paths if needed
+    if not os.path.isabs(cfg.data_dir):
+        cfg.data_dir = hydra.utils.to_absolute_path(cfg.data_dir)
+        
+    if not os.path.isabs(cfg.checkpoint_dir):
+        cfg.checkpoint_dir = hydra.utils.to_absolute_path(cfg.checkpoint_dir)
+    
 
-    parser.add_argument(
-        "--n_samples_to_asses",
-        type=int,
-        default=2000,
-        help="Number of samples to assess in the dataset",
-    )
-    parser.add_argument(
-        "--repeats",
-        type=int,
-        default=10,
-        help="Number of repeated frames in the input data",
-    )
-    parser.add_argument(
-        "--experiment_name",
-        type=str,
-        default="default_experiment",
-        help="Name of the experiment, used for checkpointing",
-    )
-    parser.add_argument(
-        "--model",
-        type=str,
-        default="sew_resnet",
-        choices=MODEL_MAP.keys(),
-        help=f"Model architecture to use. Available options: {', '.join(MODEL_MAP.keys())}",
-    )
-    parser.add_argument(
-        "--dataset",
-        type=str,
-        default="MNIST",
-        choices=DatasetFactory.available_datasets(),
-        help="Dataset to use for training and testing",
-    )
-    parser.add_argument(
-        "--checkpoint_dir",
-        type=str,
-        default="checkpoints",
-        help="Directory to save checkpoints",
-    )
-    parser.add_argument(
-        "--normalize",
-        action="store_true",
-        help="Whether to z-score normalize the dataset. If false, min-max scaling is applied.",
-    )
-    parser.add_argument(
-        "--results_dir",
-        type=str,
-        help="Directory to save results",
-    )
-    parser.add_argument(
-        "--data_dir",
-        type=str,
-        default="./data",
-        help="Root directory for datasets",
-    )
+    if "results_dir" not in cfg:
+         cfg.results_dir = os.path.join(hydra.utils.to_absolute_path("."), "results")
 
-    args = parser.parse_args()
-    model = MODEL_MAP[args.model](
-        n_channels=determine_input_size(args.dataset, args.model),
-        native_dvs_input=DatasetFactory.is_native_dvs(args.dataset),
+    if not os.path.isabs(cfg.results_dir):
+         cfg.results_dir = hydra.utils.to_absolute_path(cfg.results_dir)
+
+    model = MODEL_MAP[cfg.model.name](
+        n_channels=determine_input_size(cfg.dataset.name, cfg.model.name),
+        native_dvs_input=DatasetFactory.is_native_dvs(cfg.dataset.name),
     )
     functional.set_step_mode(model, step_mode="m")
-    checkpoint_path = path_join(args.checkpoint_dir, f"{args.experiment_name}_best.pth")
+    checkpoint_path = path_join(cfg.checkpoint_dir, f"{cfg.experiment_name}_best.pth")
     if not os.path.exists(checkpoint_path):
         raise FileNotFoundError(f"Checkpoint file {checkpoint_path} does not exist.")
     model.load_state_dict(torch.load(checkpoint_path, map_location=DEVICE))
     model.to(DEVICE)
     test_set = DatasetFactory.create_dataset(
-        args.dataset,
-        root=args.data_dir,
+        cfg.dataset.name,
+        root=cfg.data_dir,
         train=False,
-        repeat=args.repeats,
+        repeat=cfg.dataset.repeats,
         download=True,
-        normalize=args.normalize,
+        normalize=cfg.dataset.normalize,
     )
-    if not os.path.exists(args.results_dir):
-        os.makedirs(args.results_dir)
+    if not os.path.exists(cfg.results_dir):
+        os.makedirs(cfg.results_dir)
 
-    adversarial_attack_test(args, model, test_set)
+    adversarial_attack_test(cfg, model, test_set)
+
+if __name__ == "__main__":
+    run_app()

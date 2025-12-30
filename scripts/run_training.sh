@@ -27,9 +27,9 @@ srun --ntasks=1 --cpus-per-task=16 --gpus-per-task=1 --mem-per-cpu=4GB \
   --output="${OUTPUT_BASE_DIR}/out/${EXPERIMENT_NAME}_%j.out" \
   --error="${OUTPUT_BASE_DIR}/err/${EXPERIMENT_NAME}_%j.err" \
   python src/train_network.py \
-    --experiment_name "$EXPERIMENT_NAME" \
-    --dataset "$DATASET" \
-    --batch_size "$BATCH_SIZE" \
-    --epochs "$EPOCHS" \
-    --data_dir "$DATA_DIR" \
-    --model "$MODEL" &
+    experiment_name="$EXPERIMENT_NAME" \
+    dataset="$DATASET" \
+    model="$MODEL" \
+    batch_size="$BATCH_SIZE" \
+    epochs="$EPOCHS" \
+    data_dir="$DATA_DIR" &

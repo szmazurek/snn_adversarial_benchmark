@@ -12,6 +12,8 @@ from tqdm import tqdm
 from datasets import DatasetFactory
 from models import MODEL_MAP
 from utils import determine_input_size
+import hydra
+from omegaconf import DictConfig, OmegaConf
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -88,37 +90,37 @@ def test_model(model, dataloader, accuracy_metric):
     print(f"Test Accuracy: {epoch_acc:.4f}")
 
 
-def main(args):
-    output_size = DatasetFactory.num_classes(args.dataset)
-    n_channels = determine_input_size(args.dataset, args.model)
+def main(cfg: DictConfig):
+    output_size = DatasetFactory.num_classes(cfg.dataset.name)
+    n_channels = determine_input_size(cfg.dataset.name, cfg.model.name)
     checkpoint_path = os.path.join(
-        args.checkpoint_dir, f"{args.experiment_name}_best.pth"
+        cfg.checkpoint_dir, f"{cfg.experiment_name}_best.pth"
     )
-    model = MODEL_MAP[args.model](
+    model = MODEL_MAP[cfg.model.name](
         n_channels=n_channels,
         output_size=output_size,
-        native_dvs_input=DatasetFactory.is_native_dvs(args.dataset),
+        native_dvs_input=DatasetFactory.is_native_dvs(cfg.dataset.name),
     ).to(DEVICE)
     functional.set_step_mode(model, step_mode="m")
 
     dataset_repeat_train_full = DatasetFactory.create_dataset(
-        name=args.dataset,
-        normalize=args.normalize,
-        root=args.data_dir,
+        name=cfg.dataset.name,
+        normalize=cfg.dataset.normalize,
+        root=cfg.data_dir,
         train=True,
-        repeat=args.repeats,
+        repeat=cfg.dataset.repeats,
         download=True,
     )
     dataset_repeat_test = DatasetFactory.create_dataset(
-        name=args.dataset,
-        normalize=args.normalize,
-        root=args.data_dir,
+        name=cfg.dataset.name,
+        normalize=cfg.dataset.normalize,
+        root=cfg.data_dir,
         train=False,
-        repeat=args.repeats,
+        repeat=cfg.dataset.repeats,
         download=True,
     )
 
-    train_size = int((1 - args.val_split) * len(dataset_repeat_train_full))
+    train_size = int((1 - cfg.val_split) * len(dataset_repeat_train_full))
     val_size = len(dataset_repeat_train_full) - train_size
     train_dataset, val_dataset = random_split(
         dataset_repeat_train_full, [train_size, val_size]
@@ -126,21 +128,21 @@ def main(args):
 
     train_loader = DataLoader(
         train_dataset,
-        batch_size=args.batch_size,
+        batch_size=cfg.batch_size,
         shuffle=True,
-        num_workers=args.num_workers,
+        num_workers=cfg.num_workers,
     )
     val_loader = DataLoader(
         val_dataset,
-        batch_size=args.batch_size,
+        batch_size=cfg.batch_size,
         shuffle=False,
-        num_workers=args.num_workers,
+        num_workers=cfg.num_workers,
     )
     test_loader = DataLoader(
         dataset_repeat_test,
-        batch_size=args.batch_size,
+        batch_size=cfg.batch_size,
         shuffle=False,
-        num_workers=args.num_workers,
+        num_workers=cfg.num_workers,
     )
 
     criterion = nn.CrossEntropyLoss().to(DEVICE)
@@ -148,15 +150,15 @@ def main(args):
 
     optimizer = torch.optim.AdamW(
         model.parameters(),
-        lr=args.learning_rate,
-        weight_decay=args.weight_decay,
+        lr=cfg.learning_rate,
+        weight_decay=cfg.weight_decay,
     )
 
     early_stopping = EarlyStopping(
-        patience=args.patience, path=checkpoint_path, verbose=True
+        patience=cfg.patience, path=checkpoint_path, verbose=True
     )
     print("Sample shape:", next(iter(train_loader))[0].shape)
-    epoch_progbar = tqdm(range(args.epochs), desc="Epoch")
+    epoch_progbar = tqdm(range(cfg.epochs), desc="Epoch")
     for epoch in epoch_progbar:
         train_loss, train_acc = train_epoch(
             model, train_loader, criterion, optimizer, accuracy_metric, epoch
@@ -180,88 +182,28 @@ def main(args):
     model.load_state_dict(torch.load(checkpoint_path))
     test_model(model, test_loader, accuracy_metric)
 
-    print(f"Training finished for {args.experiment_name}.")
+    print(f"Training finished for {cfg.experiment_name}.")
 
+
+@hydra.main(version_base=None, config_path="conf", config_name="config")
+def run_app(cfg: DictConfig) -> None:
+    print(OmegaConf.to_yaml(cfg))
+    
+
+    if not os.path.isabs(cfg.data_dir):
+        cfg.data_dir = hydra.utils.to_absolute_path(cfg.data_dir)
+        
+    if not os.path.isabs(cfg.checkpoint_dir):
+        cfg.checkpoint_dir = hydra.utils.to_absolute_path(cfg.checkpoint_dir)
+
+    if not os.path.exists(cfg.checkpoint_dir):
+        os.makedirs(cfg.checkpoint_dir)
+
+    if cfg.model.name not in MODEL_MAP:
+        raise ValueError(f"Model '{cfg.model.name}' not found in MODEL_MAP.")
+    print(f"Using model: {cfg.model.name}, Dataset: {cfg.dataset.name}")
+
+    main(cfg)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="SNN Training Script")
-    parser.add_argument(
-        "--epochs", type=int, default=10, help="Number of training epochs"
-    )
-    parser.add_argument(
-        "--batch_size", type=int, default=8, help="Batch size for training"
-    )
-    parser.add_argument(
-        "--learning_rate", type=float, default=1e-2, help="Learning rate"
-    )
-    parser.add_argument("--weight_decay", type=float, default=0, help="Weight decay")
-    parser.add_argument(
-        "--val_split",
-        type=float,
-        default=0.1,
-        help="Fraction of training data to use for validation",
-    )
-    parser.add_argument(
-        "--repeats", type=int, default=10, help="Number of repeats for MNIST"
-    )
-    parser.add_argument(
-        "--num_workers",
-        type=int,
-        default=4,
-        help="Number of workers for data loading",
-    )
-    parser.add_argument(
-        "--patience", type=int, default=5, help="Patience for early stopping"
-    )
-    parser.add_argument(
-        "--experiment_name",
-        type=str,
-        default="default_experiment",
-        help="Name of the experiment, used for checkpointing",
-    )
-    parser.add_argument(
-        "--model",
-        type=str,
-        default="sew_resnet",
-        choices=MODEL_MAP.keys(),
-        help=f"Model architecture to use. Available options: {', '.join(MODEL_MAP.keys())}",
-    )
-    parser.add_argument(
-        "--dataset",
-        type=str,
-        default="MNIST",
-        choices=DatasetFactory.available_datasets(),
-        help="Dataset to use for training and testing",
-    )
-    parser.add_argument(
-        "--normalize",
-        action="store_true",
-        help="Whether to z-score normalize the dataset. If false, min-max scaling is applied.",
-    )
-    parser.add_argument(
-        "--checkpoint_dir",
-        type=str,
-        default="checkpoints",
-        help="Directory to save checkpoints",
-    )
-    parser.add_argument(
-        "--data_dir",
-        type=str,
-        default="./data",
-        help="Root directory for datasets",
-    )
-
-    args: argparse.Namespace = parser.parse_args()
-
-    if not os.path.exists(args.checkpoint_dir):
-        os.makedirs(args.checkpoint_dir)
-
-    # Instantiate the chosen model
-    if args.model not in MODEL_MAP:
-        raise ValueError(f"Model '{args.model}' not found in MODEL_MAP.")
-    print(f"Using model: {args.model}, Dataset: {args.dataset}")
-
-    # Pass args to main (which we need to update to accept args properly or use the global one)
-    # The main function in the original code takes 'args'.
-    # We should update main calls inside main as well.
-    main(args)
+    run_app()

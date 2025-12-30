@@ -1,0 +1,3 @@
+name: CIFAR10
+repeats: 10
+normalize: false
