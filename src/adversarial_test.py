@@ -278,6 +278,12 @@ if __name__ == "__main__":
         type=str,
         help="Directory to save results",
     )
+    parser.add_argument(
+        "--data_dir",
+        type=str,
+        default="./data",
+        help="Root directory for datasets",
+    )
 
     args = parser.parse_args()
     model = MODEL_MAP[args.model](
@@ -292,7 +298,7 @@ if __name__ == "__main__":
     model.to(DEVICE)
     test_set = DatasetFactory.create_dataset(
         args.dataset,
-        root="./data",
+        root=args.data_dir,
         train=False,
         repeat=args.repeats,
         download=True,

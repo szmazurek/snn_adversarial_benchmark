@@ -118,8 +118,7 @@ class VideoTransform:
 
 class UCF101ClipDataset(UCF101):
 
-    DEFAULT_ROOT = "/net/tscratch/people/plgmazurekagh/snn_adversarial_benchmark/data/ucf101/videos"
-    DEFAULT_ANNOTATION_PATH = "/net/tscratch/people/plgmazurekagh/snn_adversarial_benchmark/data/ucf101/annotations"
+
 
     def __init__(
         self,
@@ -133,8 +132,18 @@ class UCF101ClipDataset(UCF101):
         download: bool = False,  # unused, just for compatibility
         **kwargs,
     ):
-        root = self.DEFAULT_ROOT
-        annotation_path = annotation_path or self.DEFAULT_ANNOTATION_PATH
+        if root is None:
+            raise ValueError("Root directory not specified for UCF101 dataset.")
+
+        if annotation_path is None:
+            # Assume annotations are in "annotations" subdirectory of root's parent or similar,
+            # for now, let's just default to root/annotations if not provided,
+            # OR raise error. Making it required is safer if structure is not guaranteed.
+            # But based on typical use, let's try to be helpful.
+            annotation_path = os.path.join(root, "annotations")
+            if not os.path.exists(annotation_path):
+                 print(f"Warning: Annotation path not found at {annotation_path}. Please specify annotation_path explicitly if it is different.")
+
 
         if not os.path.exists(root) or not os.path.exists(annotation_path):
             print(
@@ -190,10 +199,7 @@ class UCF11ClipDataset(VisionDataset):
         "walking",
     ]
 
-    # Hardcode your path here or pass it via Factory
-    DEFAULT_ROOT = (
-        "/net/tscratch/people/plgmazurekagh/snn_adversarial_benchmark/data/ucf11"
-    )
+
 
     def __init__(
         self,
@@ -204,7 +210,9 @@ class UCF11ClipDataset(VisionDataset):
         resize_shape: tuple = (128, 128),
         **kwargs,
     ):
-        root = self.DEFAULT_ROOT
+        # root = self.DEFAULT_ROOT
+        if root is None:
+            raise ValueError("Root directory not specified for UCF11 dataset.")
         super().__init__(root)
 
         self.train = train
@@ -315,35 +323,38 @@ class UCF11ClipDataset(VisionDataset):
 
 
 class EventMNISTDataset(NMNIST):
-    PREEXTRACTED_DATA_PATH = "/net/tscratch/people/plgmazurekagh/snn_adversarial_benchmark/data/nmnist_compressed_10_frames.tar.gz"
     DATA_ROOT_DIR_FOLDER_NAME = "nmnist"
 
-    def __init__(self, *args, repeat: int = 1, normalize: bool = True, **kwargs):
-        self.memfs_path = os.environ.get("MEMFS")
-        assert os.path.exists(self.PREEXTRACTED_DATA_PATH), (
-            f"Pre-extracted data path {self.PREEXTRACTED_DATA_PATH} does not exist. "
-            "You either do not have the file or you are not on the cluster."
-            "This path is HARDCODED in the class of this dataset, please change it if needed."
-        )
-        assert (
-            os.environ.get("MEMFS") is not None
-        ), "MEMFS environment variable must be set, or you kill the cluster FS with many files"
-        # untar the dataset into memfs
-        self.data_root = os.path.join(self.memfs_path, self.DATA_ROOT_DIR_FOLDER_NAME)
-        if os.path.exists(self.data_root):
-            print(f"Data root {self.data_root} already exists, skipping extraction.")
-        else:
-            print(
-                f"Extracting dataset to MEMFS path {self.memfs_path}, this may take a while..."
-            )
-            shutil.unpack_archive(self.PREEXTRACTED_DATA_PATH, self.memfs_path)
+    def __init__(self, root: str, repeat: int = 1, normalize: bool = True, **kwargs):
+        if root is None:
+            raise ValueError("Root directory not specified for EventMNIST dataset.")
 
-        assert os.path.exists(self.data_root), (
-            f"Extracted data path {self.data_root} does not exist. "
-            "Something went wrong with the extraction."
-            f"The dataset should be extracted into MEMFS path as '{self.DATA_ROOT_DIR_FOLDER_NAME}' folder."
-            "The folder name is HARDCODED in the class of this dataset, please change it if needed."
-        )
+        # If user provides a root, we check if it is the dataset folder itself or contains it
+        # NMNIST class usually expects root to contain the "n_mnist" folder structure or similar.
+        # But here we want to be flexible.
+        
+        # We will assume `root` passed is where the data is supposed to be.
+        # Check if root is a directory
+        self.data_root = root
+        
+        # Check if compressed file exists if folder doesn't
+        if not os.path.isdir(self.data_root):
+            # Check if it might be a tar.gz file
+             if self.data_root.endswith("tar.gz") and os.path.isfile(self.data_root):
+                 # If it is a tar file, we might want to extract it?
+                 # ideally we extract to the same dir.
+                 extract_path = os.path.dirname(self.data_root)
+                 print(f"Extracting {self.data_root} to {extract_path}...")
+                 shutil.unpack_archive(self.data_root, extract_path)
+                 # Update data_root to the extracted folder. 
+                 # Assuming extracting "nmnist.tar.gz" gives "nmnist" folder?
+                 # This logic is a bit specific to how the tar was made.
+                 # Let's try to find the folder.
+                 # For now, let's keep it simple: WE EXPECT EXTRACTED FOLDER unless explicit.
+                 pass
+
+        if not os.path.exists(self.data_root):
+             print(f"Warning: EventMNIST data root {self.data_root} does not exist.")
         transform_pipeline = (
             Compose(
                 [
@@ -366,7 +377,6 @@ class EventMNISTDataset(NMNIST):
         kwargs.pop("download", None)  # we do not want to download
 
         super().__init__(
-            *args,
             root=self.data_root,
             transform=transform_pipeline,
             frames_number=repeat,

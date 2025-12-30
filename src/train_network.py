@@ -104,7 +104,7 @@ def main(args):
     dataset_repeat_train_full = DatasetFactory.create_dataset(
         name=args.dataset,
         normalize=args.normalize,
-        root="./data",
+        root=args.data_dir,
         train=True,
         repeat=args.repeats,
         download=True,
@@ -112,7 +112,7 @@ def main(args):
     dataset_repeat_test = DatasetFactory.create_dataset(
         name=args.dataset,
         normalize=args.normalize,
-        root="./data",
+        root=args.data_dir,
         train=False,
         repeat=args.repeats,
         download=True,
@@ -244,6 +244,12 @@ if __name__ == "__main__":
         default="checkpoints",
         help="Directory to save checkpoints",
     )
+    parser.add_argument(
+        "--data_dir",
+        type=str,
+        default="./data",
+        help="Root directory for datasets",
+    )
 
     args: argparse.Namespace = parser.parse_args()
 
@@ -254,4 +260,8 @@ if __name__ == "__main__":
     if args.model not in MODEL_MAP:
         raise ValueError(f"Model '{args.model}' not found in MODEL_MAP.")
     print(f"Using model: {args.model}, Dataset: {args.dataset}")
+
+    # Pass args to main (which we need to update to accept args properly or use the global one)
+    # The main function in the original code takes 'args'.
+    # We should update main calls inside main as well.
     main(args)
