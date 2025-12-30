@@ -1,4 +1,5 @@
 import os
+import glob
 import shutil
 
 import torch
@@ -7,6 +8,9 @@ from torchvision.datasets import MNIST, CIFAR10, UCF101
 from spikingjelly.datasets.n_mnist import NMNIST
 from torchvision.datasets import CIFAR10, MNIST
 from torchvision.transforms import Compose, Normalize, ToTensor
+from torchvision.datasets import VisionDataset
+from torchvision.io import read_video
+
 
 SINGLE_CHANNEL_DATASETS = ["MNIST", "FashionMNIST", "KMNIST"]
 
@@ -26,7 +30,9 @@ class EventMNISTToTensorTransform(torch.nn.Module):
 
 
 class MNISTRepeated(MNIST):
-    def __init__(self, *args, repeat: int = 1, normalize: bool = True, **kwargs):
+    def __init__(
+        self, *args, repeat: int = 1, normalize: bool = True, **kwargs
+    ):
         super().__init__(*args, **kwargs)
         self.repeat = repeat
         self.normalize = normalize
@@ -56,7 +62,9 @@ class MNISTRepeated(MNIST):
 
 class CIFAR10Repeated(CIFAR10):
 
-    def __init__(self, *args, repeat: int = 1, normalize: bool = True, **kwargs):
+    def __init__(
+        self, *args, repeat: int = 1, normalize: bool = True, **kwargs
+    ):
 
         super().__init__(*args, transform=None, **kwargs)
 
@@ -66,7 +74,9 @@ class CIFAR10Repeated(CIFAR10):
             Compose(
                 [
                     ToTensor(),
-                    Normalize((0.4914, 0.4822, 0.4465), (0.2470, 0.2435, 0.2616)),
+                    Normalize(
+                        (0.4914, 0.4822, 0.4465), (0.2470, 0.2435, 0.2616)
+                    ),
                 ]
             )
             if normalize
@@ -109,7 +119,9 @@ class VideoTransform:
 
         if self.normalize:
 
-            mean = torch.tensor(self.mean, device=video.device).view(1, 3, 1, 1)
+            mean = torch.tensor(self.mean, device=video.device).view(
+                1, 3, 1, 1
+            )
             std = torch.tensor(self.std, device=video.device).view(1, 3, 1, 1)
             video = (video - mean) / std
 
@@ -117,8 +129,6 @@ class VideoTransform:
 
 
 class UCF101ClipDataset(UCF101):
-
-
 
     def __init__(
         self,
@@ -133,7 +143,9 @@ class UCF101ClipDataset(UCF101):
         **kwargs,
     ):
         if root is None:
-            raise ValueError("Root directory not specified for UCF101 dataset.")
+            raise ValueError(
+                "Root directory not specified for UCF101 dataset."
+            )
 
         if annotation_path is None:
             # Assume annotations are in "annotations" subdirectory of root's parent or similar,
@@ -142,15 +154,18 @@ class UCF101ClipDataset(UCF101):
             # But based on typical use, let's try to be helpful.
             annotation_path = os.path.join(root, "annotations")
             if not os.path.exists(annotation_path):
-                 print(f"Warning: Annotation path not found at {annotation_path}. Please specify annotation_path explicitly if it is different.")
-
+                print(
+                    f"Warning: Annotation path not found at {annotation_path}. Please specify annotation_path explicitly if it is different."
+                )
 
         if not os.path.exists(root) or not os.path.exists(annotation_path):
             print(
                 f"Warning: UCF101 paths not found.\nRoot: {root}\nAnno: {annotation_path}"
             )
 
-        self.transform_pipeline = VideoTransform(size=resize_shape, normalize=normalize)
+        self.transform_pipeline = VideoTransform(
+            size=resize_shape, normalize=normalize
+        )
 
         if not normalize:
             print("Z-score standardization is disabled for UCF101.")
@@ -170,11 +185,6 @@ class UCF101ClipDataset(UCF101):
         video, audio, label = super().__getitem__(index)
         video = self.transform_pipeline(video)
         return video, label
-
-
-import glob
-from torchvision.datasets import VisionDataset
-from torchvision.io import read_video
 
 
 class UCF11ClipDataset(VisionDataset):
@@ -199,8 +209,6 @@ class UCF11ClipDataset(VisionDataset):
         "walking",
     ]
 
-
-
     def __init__(
         self,
         root=None,
@@ -217,7 +225,9 @@ class UCF11ClipDataset(VisionDataset):
 
         self.train = train
         self.frames_per_clip = repeat
-        self.transform_pipeline = VideoTransform(size=resize_shape, normalize=normalize)
+        self.transform_pipeline = VideoTransform(
+            size=resize_shape, normalize=normalize
+        )
         self.samples = []
         self.class_to_idx = {cls: i for i, cls in enumerate(self.CLASSES)}
 
@@ -249,7 +259,9 @@ class UCF11ClipDataset(VisionDataset):
             video_files = []
             for ext in extensions:
                 video_files.extend(
-                    glob.glob(os.path.join(class_dir, "**", ext), recursive=True)
+                    glob.glob(
+                        os.path.join(class_dir, "**", ext), recursive=True
+                    )
                 )
 
             for file_path in video_files:
@@ -268,7 +280,9 @@ class UCF11ClipDataset(VisionDataset):
                 is_train_group = group_id < 20
 
                 if self.train == is_train_group:
-                    self.samples.append((file_path, self.class_to_idx[class_name]))
+                    self.samples.append(
+                        (file_path, self.class_to_idx[class_name])
+                    )
 
     def __len__(self):
         return len(self.samples)
@@ -307,7 +321,11 @@ class UCF11ClipDataset(VisionDataset):
                     )  # (1, C, T, H, W)
                     vframes = torch.nn.functional.interpolate(
                         vframes,
-                        size=(self.frames_per_clip, vframes.shape[3], vframes.shape[4]),
+                        size=(
+                            self.frames_per_clip,
+                            vframes.shape[3],
+                            vframes.shape[4],
+                        ),
                     )
                     vframes = vframes.squeeze(0).permute(
                         1, 2, 3, 0
@@ -325,36 +343,44 @@ class UCF11ClipDataset(VisionDataset):
 class EventMNISTDataset(NMNIST):
     DATA_ROOT_DIR_FOLDER_NAME = "nmnist"
 
-    def __init__(self, root: str, repeat: int = 1, normalize: bool = True, **kwargs):
+    def __init__(
+        self, root: str, repeat: int = 1, normalize: bool = True, **kwargs
+    ):
         if root is None:
-            raise ValueError("Root directory not specified for EventMNIST dataset.")
+            raise ValueError(
+                "Root directory not specified for EventMNIST dataset."
+            )
 
         # If user provides a root, we check if it is the dataset folder itself or contains it
         # NMNIST class usually expects root to contain the "n_mnist" folder structure or similar.
         # But here we want to be flexible.
-        
+
         # We will assume `root` passed is where the data is supposed to be.
         # Check if root is a directory
         self.data_root = root
-        
+
         # Check if compressed file exists if folder doesn't
         if not os.path.isdir(self.data_root):
             # Check if it might be a tar.gz file
-             if self.data_root.endswith("tar.gz") and os.path.isfile(self.data_root):
-                 # If it is a tar file, we might want to extract it?
-                 # ideally we extract to the same dir.
-                 extract_path = os.path.dirname(self.data_root)
-                 print(f"Extracting {self.data_root} to {extract_path}...")
-                 shutil.unpack_archive(self.data_root, extract_path)
-                 # Update data_root to the extracted folder. 
-                 # Assuming extracting "nmnist.tar.gz" gives "nmnist" folder?
-                 # This logic is a bit specific to how the tar was made.
-                 # Let's try to find the folder.
-                 # For now, let's keep it simple: WE EXPECT EXTRACTED FOLDER unless explicit.
-                 pass
+            if self.data_root.endswith("tar.gz") and os.path.isfile(
+                self.data_root
+            ):
+                # If it is a tar file, we might want to extract it?
+                # ideally we extract to the same dir.
+                extract_path = os.path.dirname(self.data_root)
+                print(f"Extracting {self.data_root} to {extract_path}...")
+                shutil.unpack_archive(self.data_root, extract_path)
+                # Update data_root to the extracted folder.
+                # Assuming extracting "nmnist.tar.gz" gives "nmnist" folder?
+                # This logic is a bit specific to how the tar was made.
+                # Let's try to find the folder.
+                # For now, let's keep it simple: WE EXPECT EXTRACTED FOLDER unless explicit.
+                pass
 
         if not os.path.exists(self.data_root):
-             print(f"Warning: EventMNIST data root {self.data_root} does not exist.")
+            print(
+                f"Warning: EventMNIST data root {self.data_root} does not exist."
+            )
         transform_pipeline = (
             Compose(
                 [

@@ -28,7 +28,7 @@ DATASET=""
 MODEL=""
 STEP="all"
 DATA_DIR="./data"
-OUTPUT_BASE_DIR="/net/tscratch/people/plgmazurekagh/snn_adversarial_benchmark/output_files"
+OUTPUT_BASE_DIR="./output_files"
 SCRATCH_DIR="$SCRATCH/snn_adversarial_benchmark"
 
 # Helper function to print usage
