@@ -1,15 +1,14 @@
 import argparse
 import glob
 import os
+import re
 from argparse import ArgumentParser
-from copy import deepcopy
 from typing import Any, List
 
 import cupy as cp
 import numpy as np
 import pandas as pd
 from scipy.stats import kurtosis, skew
-from sympy import arg
 from tqdm import tqdm
 
 FIXED_HIGH_THRESHOLD_4TH_PERCENTILE = 0.75
@@ -25,15 +24,17 @@ class ScriptArgs(argparse.Namespace):
 
 
 class MatrixStats:
-    """A data class to hold various statistical measurements of a matrix.
+    """
+    A data class to hold various statistical measurements of a matrix.
 
     Casts specific fields (mean, median, kurt, skewness, p99_value) to float,
     and count fields (all others) to int in the constructor.
-
     """
 
     def __init__(self, **kwargs: Any):
-        """Initializes the stats fields and performs mandatory type casting."""
+        """
+        Initializes the stats fields and performs mandatory type casting.
+        """
         self.mean: float = float(kwargs.get("mean", 0.0))
         self.std_dev: float = float(kwargs.get("std_dev", 0.0))
         self.median: float = float(kwargs.get("median", 0.0))
@@ -95,18 +96,45 @@ class MatrixStats:
         return list(self.to_dict().keys())
 
 
-def prepare_paths_list_npy_files(
-    root_dir: str, search_pattern: str = "*spike_layer_2.npy"
-):
-    """Given root dir, recurse into it and find paths to all files matching the
-    pattern."""
-    search_path_pattern = os.path.join(root_dir, "**", search_pattern)
-    found_npy_files_paths: List[str] = glob.glob(
-        search_path_pattern, recursive=True
-    )
-    assert found_npy_files_paths, "No results found for given pattern!"
+def prepare_paths_list_npy_files(root_dir: str):
+    """
+    Recurse into root_dir, find all spike_layer files, determine the
+    highest layer index present, and return only those paths.
+    """
+    # 1. Search for a generic pattern that captures ANY layer number
+    # This matches ...spike_layer_0.npy, ...spike_layer_10.npy, etc.
+    search_path_pattern = os.path.join(root_dir, "**", "*spike_layer_*.npy")
+    all_found_paths = glob.glob(search_path_pattern, recursive=True)
 
-    return found_npy_files_paths
+    assert all_found_paths, "No spike_layer files found!"
+
+    # 2. Use Regex to extract the layer number from the filenames
+    # This looks for "spike_layer_" followed by digits (\d+) right before ".npy"
+    layer_pattern = re.compile(r"spike_layer_(\d+)\.npy$")
+
+    path_layer_pairs = []
+    max_layer = -1
+
+    for path in all_found_paths:
+        match = layer_pattern.search(path)
+        if match:
+            layer_num = int(match.group(1))
+            path_layer_pairs.append((layer_num, path))
+
+            # Track the highest layer found
+            if layer_num > max_layer:
+                max_layer = layer_num
+
+    assert (
+        max_layer >= 0
+    ), "Could not parse valid layer numbers from filenames!"
+
+    print(f"Automatically detected highest spike layer: {max_layer}")
+
+    # 3. Filter the list to include ONLY the files from the highest layer
+    final_paths = [p for l, p in path_layer_pairs if l == max_layer]
+
+    return final_paths
 
 
 def compute_correlation_from_activity_matrix(activity_matrix: np.ndarray):
@@ -118,7 +146,9 @@ def compute_correlation_from_activity_matrix(activity_matrix: np.ndarray):
 
 
 def compute_matrix_statistics(input_matrix: np.ndarray):
-    """Calculate stats from input matrix."""
+    """
+    Calculate stats from input matrix.
+    """
     flattened_matrix = input_matrix.flatten()
     mean = np.mean(flattened_matrix) * MEAN_MEDIAN_SCALING_FACTOR
     median = np.median(flattened_matrix) * MEAN_MEDIAN_SCALING_FACTOR

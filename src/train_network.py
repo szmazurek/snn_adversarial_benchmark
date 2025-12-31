@@ -1,8 +1,9 @@
-import argparse
 import os
 
+import hydra
 import torch
 from early_stopping_pytorch import EarlyStopping
+from omegaconf import DictConfig, OmegaConf
 from spikingjelly.activation_based import functional
 from torch import nn
 from torch.utils.data import DataLoader, random_split
@@ -12,13 +13,13 @@ from tqdm import tqdm
 from datasets import DatasetFactory
 from models import MODEL_MAP
 from utils import determine_input_size
-import hydra
-from omegaconf import DictConfig, OmegaConf
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def train_epoch(model, dataloader, criterion, optimizer, accuracy_metric, epoch):
+def train_epoch(
+    model, dataloader, criterion, optimizer, accuracy_metric, epoch
+):
     model.train()
     epoch_loss = 0
     epoch_preds = []
@@ -53,7 +54,9 @@ def validate_epoch(model, dataloader, criterion, accuracy_metric, epoch):
     epoch_preds = []
     epoch_targets = []
     with torch.no_grad():
-        dataloader_progbar = tqdm(dataloader, desc=f"Validation Epoch {epoch+1}")
+        dataloader_progbar = tqdm(
+            dataloader, desc=f"Validation Epoch {epoch+1}"
+        )
         for img, target in dataloader_progbar:
             out = model(img.transpose(0, 1).to(DEVICE)).mean(0)
             loss = criterion(out, target.to(DEVICE))
@@ -146,7 +149,9 @@ def main(cfg: DictConfig):
     )
 
     criterion = nn.CrossEntropyLoss().to(DEVICE)
-    accuracy_metric = Accuracy(task="multiclass", num_classes=output_size).to(DEVICE)
+    accuracy_metric = Accuracy(task="multiclass", num_classes=output_size).to(
+        DEVICE
+    )
 
     optimizer = torch.optim.AdamW(
         model.parameters(),
@@ -188,11 +193,10 @@ def main(cfg: DictConfig):
 @hydra.main(version_base=None, config_path="conf", config_name="config")
 def run_app(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
-    
 
     if not os.path.isabs(cfg.data_dir):
         cfg.data_dir = hydra.utils.to_absolute_path(cfg.data_dir)
-        
+
     if not os.path.isabs(cfg.checkpoint_dir):
         cfg.checkpoint_dir = hydra.utils.to_absolute_path(cfg.checkpoint_dir)
 
@@ -204,6 +208,7 @@ def run_app(cfg: DictConfig) -> None:
     print(f"Using model: {cfg.model.name}, Dataset: {cfg.dataset.name}")
 
     main(cfg)
+
 
 if __name__ == "__main__":
     run_app()

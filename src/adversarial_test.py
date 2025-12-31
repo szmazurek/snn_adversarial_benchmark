@@ -1,25 +1,21 @@
 import os
+from argparse import ArgumentParser
+from copy import deepcopy
+from os.path import join as path_join
+from random import sample as random_sample
+from random import shuffle
+from typing import Dict, List
+
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
-from os.path import join as path_join
-
 import tqdm
-from copy import deepcopy
-from datasets import DatasetFactory
-from random import sample as random_sample, shuffle
 from spikingjelly.activation_based import functional, neuron
 from torch.nn.functional import softmax
 
-from typing import List, Dict
 from datasets import DatasetFactory
 from models import MODEL_MAP
 from utils import determine_input_size
-from datasets import DatasetFactory
-from models import MODEL_MAP
-from utils import determine_input_size
-import hydra
-from omegaconf import DictConfig, OmegaConf
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -76,7 +72,9 @@ def process_data_recorded_by_hooks(
     )
     last_dir_name: str = "correct" if is_correct else "incorrect"
     last_dir_name += (
-        "_original" if noise_level is None else f"_noise_{round(100*noise_level)}"
+        "_original"
+        if noise_level is None
+        else f"_noise_{round(100*noise_level)}"
     )
     sample_save_path = path_join(sample_save_path, last_dir_name)
     if not os.path.exists(sample_save_path):
@@ -86,11 +84,13 @@ def process_data_recorded_by_hooks(
         s_seq = torch.cat(data["s_seq"]).cpu().numpy().squeeze()
         voltage_path = path_join(
             sample_save_path,
-            f"test_{sample_idx}_label_{label}_voltage" f"_{name.replace('-', 'm')}.npy",
+            f"test_{sample_idx}_label_{label}_voltage"
+            f"_{name.replace('-', 'm')}.npy",
         )
         spike_path = path_join(
             sample_save_path,
-            f"test_{sample_idx}_label_{label}_spike_" f"{name.replace('-', 'm')}.npy",
+            f"test_{sample_idx}_label_{label}_spike_"
+            f"{name.replace('-', 'm')}.npy",
         )
         np.save(voltage_path, v_seq)
         np.save(spike_path, s_seq)
@@ -105,7 +105,9 @@ def generate_random_frame(img):
 
     random_img = torch.rand_like(img[0], dtype=torch.float32, device=DEVICE)
     # TODO should I standardize with the dataset mean and std?
-    random_img = (random_img - random_img.min()) / (random_img.max() - random_img.min())
+    random_img = (random_img - random_img.min()) / (
+        random_img.max() - random_img.min()
+    )
     return random_img
 
 
@@ -114,7 +116,9 @@ def generate_noisy_frame_permute(img):
     permutes the pixel values in each channel independently."""
     flattened_img = img.view(img.size(0), -1)
     channel_dim, all_pixels = flattened_img.size()
-    perm_indices = torch.rand(channel_dim, all_pixels, device=DEVICE).argsort(dim=1)
+    perm_indices = torch.rand(channel_dim, all_pixels, device=DEVICE).argsort(
+        dim=1
+    )
     permuted_flattened_img = torch.gather(flattened_img, 1, perm_indices)
     permuted_img = permuted_flattened_img.view_as(img)
     return permuted_img
@@ -130,14 +134,14 @@ def adversarial_attack_test(
     lif_nodes: List[nn.Module] = get_lif_nodes(model)
     # we take only last LIF node for hooking to reduce memory usage
     lif_nodes = [lif_nodes[-1]]
-    hooked_layers: Dict[str, Dict[str, List[torch.Tensor]]] = apply_forward_hooks(
-        lif_nodes
+    hooked_layers: Dict[str, Dict[str, List[torch.Tensor]]] = (
+        apply_forward_hooks(lif_nodes)
     )
     dataloader = torch.utils.data.DataLoader(
         dataset,
         batch_size=1,
         shuffle=(
-            True if DatasetFactory.is_native_dvs(args.dataset.name) else False
+            True if DatasetFactory.is_native_dvs(args.dataset) else False
         ),  # Event MNIST is in order
         num_workers=4,
     )
@@ -185,7 +189,9 @@ def adversarial_attack_test(
             # randomly select a frame to replace
             # (but not the ones already replaced)
             idxs_to_choose = [
-                i for i in range(args.dataset.repeats) if i not in replaced_frames_idxes
+                i
+                for i in range(args.repeats)
+                if i not in replaced_frames_idxes
             ]
             if not idxs_to_choose:
                 attack_end = True
@@ -204,7 +210,7 @@ def adversarial_attack_test(
                 {
                     "hooked_layers": deepcopy(hooked_layers),
                     "is_correct": pred_correct,
-                    "noise_level": replaced_frames_count / args.dataset.repeats,
+                    "noise_level": replaced_frames_count / args.repeats,
                     "sample_idx": n,
                     "label": target,
                 }
@@ -231,44 +237,83 @@ def adversarial_attack_test(
             clear_hook_container(hooked_layers)
 
 
-@hydra.main(version_base=None, config_path="conf", config_name="config")
-def run_app(cfg: DictConfig) -> None:
-    # Resolve paths if needed
-    if not os.path.isabs(cfg.data_dir):
-        cfg.data_dir = hydra.utils.to_absolute_path(cfg.data_dir)
-        
-    if not os.path.isabs(cfg.checkpoint_dir):
-        cfg.checkpoint_dir = hydra.utils.to_absolute_path(cfg.checkpoint_dir)
-    
+if __name__ == "__main__":
+    parser = ArgumentParser(description="Adversarial Attack Test Script")
 
-    if "results_dir" not in cfg:
-         cfg.results_dir = os.path.join(hydra.utils.to_absolute_path("."), "results")
+    parser.add_argument(
+        "--n_samples_to_asses",
+        type=int,
+        default=2000,
+        help="Number of samples to assess in the dataset",
+    )
+    parser.add_argument(
+        "--repeats",
+        type=int,
+        default=10,
+        help="Number of repeated frames in the input data",
+    )
+    parser.add_argument(
+        "--experiment_name",
+        type=str,
+        default="default_experiment",
+        help="Name of the experiment, used for checkpointing",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="sew_resnet",
+        choices=MODEL_MAP.keys(),
+        help=f"Model architecture to use. Available options: {', '.join(MODEL_MAP.keys())}",
+    )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default="MNIST",
+        choices=DatasetFactory.available_datasets(),
+        help="Dataset to use for training and testing",
+    )
+    parser.add_argument(
+        "--checkpoint_dir",
+        type=str,
+        default="checkpoints",
+        help="Directory to save checkpoints",
+    )
+    parser.add_argument(
+        "--normalize",
+        action="store_true",
+        help="Whether to z-score normalize the dataset. If false, min-max scaling is applied.",
+    )
+    parser.add_argument(
+        "--results_dir",
+        type=str,
+        help="Directory to save results",
+    )
 
-    if not os.path.isabs(cfg.results_dir):
-         cfg.results_dir = hydra.utils.to_absolute_path(cfg.results_dir)
-
-    model = MODEL_MAP[cfg.model.name](
-        n_channels=determine_input_size(cfg.dataset.name, cfg.model.name),
-        native_dvs_input=DatasetFactory.is_native_dvs(cfg.dataset.name),
+    args = parser.parse_args()
+    model = MODEL_MAP[args.model](
+        output_size=DatasetFactory.num_classes(args.dataset),
+        n_channels=determine_input_size(args.dataset, args.model),
+        native_dvs_input=DatasetFactory.is_native_dvs(args.dataset),
     )
     functional.set_step_mode(model, step_mode="m")
-    checkpoint_path = path_join(cfg.checkpoint_dir, f"{cfg.experiment_name}_best.pth")
+    checkpoint_path = path_join(
+        args.checkpoint_dir, f"{args.experiment_name}_best.pth"
+    )
     if not os.path.exists(checkpoint_path):
-        raise FileNotFoundError(f"Checkpoint file {checkpoint_path} does not exist.")
+        raise FileNotFoundError(
+            f"Checkpoint file {checkpoint_path} does not exist."
+        )
     model.load_state_dict(torch.load(checkpoint_path, map_location=DEVICE))
     model.to(DEVICE)
     test_set = DatasetFactory.create_dataset(
-        cfg.dataset.name,
-        root=cfg.data_dir,
+        args.dataset,
+        root="./data",
         train=False,
-        repeat=cfg.dataset.repeats,
+        repeat=args.repeats,
         download=True,
-        normalize=cfg.dataset.normalize,
+        normalize=args.normalize,
     )
-    if not os.path.exists(cfg.results_dir):
-        os.makedirs(cfg.results_dir)
+    if not os.path.exists(args.results_dir):
+        os.makedirs(args.results_dir)
 
-    adversarial_attack_test(cfg, model, test_set)
-
-if __name__ == "__main__":
-    run_app()
+    adversarial_attack_test(args, model, test_set)

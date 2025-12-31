@@ -63,7 +63,9 @@ def SpikingVGG11BN(
     net.classifier[6] = layer.Linear(512, output_size)
 
     pool_indices: list[int] = [
-        i for i, module in enumerate(net.features) if isinstance(module, nn.MaxPool2d)
+        i
+        for i, module in enumerate(net.features)
+        if isinstance(module, nn.MaxPool2d)
     ]
 
     if remove_last_pool > 0 and len(pool_indices) >= remove_last_pool:
@@ -74,7 +76,9 @@ def SpikingVGG11BN(
             else -1
         )
         for i, module in enumerate(net.features):
-            if i <= last_pool_index_to_keep or not isinstance(module, nn.MaxPool2d):
+            if i <= last_pool_index_to_keep or not isinstance(
+                module, nn.MaxPool2d
+            ):
                 modules_to_keep.append(module)
         net.features = nn.Sequential(*modules_to_keep)
 

@@ -1,16 +1,12 @@
-import os
 import glob
+import os
 import shutil
 
 import torch
-from torchvision.transforms import Compose, ToTensor, Normalize
-from torchvision.datasets import MNIST, CIFAR10, UCF101
 from spikingjelly.datasets.n_mnist import NMNIST
-from torchvision.datasets import CIFAR10, MNIST
-from torchvision.transforms import Compose, Normalize, ToTensor
-from torchvision.datasets import VisionDataset
+from torchvision.datasets import CIFAR10, MNIST, UCF101, VisionDataset
 from torchvision.io import read_video
-
+from torchvision.transforms import Compose, Normalize, ToTensor
 
 SINGLE_CHANNEL_DATASETS = ["MNIST", "FashionMNIST", "KMNIST"]
 
@@ -99,9 +95,7 @@ class CIFAR10Repeated(CIFAR10):
 
 
 class VideoTransform:
-    """
-    Applies transforms to a video tensor of shape (T, C, H, W).
-    """
+    """Applies transforms to a video tensor of shape (T, C, H, W)."""
 
     def __init__(self, size=(128, 128), normalize=True, mean=None, std=None):
         self.normalize = normalize
@@ -188,11 +182,12 @@ class UCF101ClipDataset(UCF101):
 
 
 class UCF11ClipDataset(VisionDataset):
-    """
-    UCF11 (YouTube Action) Dataset.
+    """UCF11 (YouTube Action) Dataset.
+
     Source Data Structure expected:
         root/basketball/v_shooting_01/video.mpg
         root/biking/v_biking_01/video.mpg
+
     """
 
     CLASSES = [
@@ -240,10 +235,11 @@ class UCF11ClipDataset(VisionDataset):
         self._make_dataset()
 
     def _make_dataset(self):
-        """
-        Scans the directory.
+        """Scans the directory.
+
         Splitting Protocol: UCF11 has ~25 groups per class.
         We use groups 01-19 for TRAIN and 20-25 for TEST (approx 80/20 split).
+
         """
         if not os.path.exists(self.root):
             return
